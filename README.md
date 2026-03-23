@@ -656,11 +656,16 @@ We should also have a way to indicate that there are overrides within a data con
 
 The override indicator also should be granular enough that if you have laid out multiple widgets on the same row, each of them can be highlighted out separately.
 
-One challange I faced in this prototype was how to apply the marker to markers, like keyframes. Many options I tried felt too much like the marker was selected. I eventually settled in a horizontal line over the marker, as it did not look like anything that felt like it had meaning on the timeline.
+One challange I faced in this prototype was how to apply the indicator to markers, like keyframes. Many options I tried felt too much like the marker was selected. I eventually settled in a horizontal line over the marker, as it did not look like anything that felt like it had meaning on the timeline.
 
-In addition to the indicator we also need a way to revert the changes. For widget rows, the easiest is to have option in right click menu and a button. Some applications seem to combine the revert button and per row override indicator, which can also be a good idea.
+In addition to the indicator we also need a way to revert the changes. For widget rows, the easiest is to have a button, or an option in right click menu. Some applications seem to combine the revert button and per row override indicator, which can also be a good idea.
 
-Removed items need extra care, since they are not represented in the UI. I chose include simple indicator next to the item count to signal that items have been removed from the container. The indicator also has quick preview of the items.
+Removed items need extra care, since they are not represented in the UI. I chose to include simple red indicator next to the item count to signal that items have been removed from the container. The indicator also has quick preview of the items as tooltip.
 
-The per container revert allows all the changes to be reverted, or more granular way to revert the removed items.
+The revert button on the container header allows all the changes to be reverted, or more granular way to revert the removed items.
 
+The revert UI can get as complex as the rest of the UI. We are essentially building a tool that handles the invisible connections between two documents.
+
+## Conclusion
+
+A robust and efficient solution for data inheritance can be hard to implement, since many decisions require making decisions across the whole tech stack from low level representation to the UI. I hope this article could provide some guidance, and maybe the prototype can be used to test some ideas out.
