@@ -593,7 +593,7 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 	}
 
 	if (command.type == COMMAND_INSERT_AT) {
-		color_stop_t new_stop = {0};
+		color_stop_t new_stop = { .id = gen_id() };
 		if (command.t < 0.f) {
 			// From add button
 			if (grad->stops_count == 0) {
