@@ -226,7 +226,7 @@ In order to be able to relate data between base and derived, we need something t
 
 The simplest thing is a random UID. Using random UIDs allows anyone anywhere to create new IDs without the risk of fearing that two will collide with others (fingers crossed!). This is important in terms of the inheritance, but also for merging changes via version control. The chance of collision will depend on the size of the UID, 8 bytes might be ok, 16 bytes is quite generally accepted as solid base.
 
-| **Note**: In the example code we will use 2 byte pseudo random IDs so that they are easy to visually debug. Do not use 2 bytes in production!
+> **Note**: In the example code we will use 2 byte pseudo random IDs so that they are easy to visually debug. Do not use 2 bytes in production!
 
 Since we are also more than unique IDs, we can rethink how we store our overrides. We still need to know which items in the array are inserted or removed compared to the base data. For the items that are new on derived data we could store a flag that indicates that they are inserted. Since removed items do not have any representation, we need a separate array, like our previous overrides array to store the items that exiists in base but are removed in derived data. We call this *discarded list* to avoid confusion with other uses of removed.
 
@@ -765,3 +765,35 @@ The revert UI can get as complex as the rest of the UI. We are essentially build
 ## Conclusion
 
 A robust and efficient solution for data inheritance can be hard to implement, since many decisions require making decisions across the whole tech stack from low level representation to the UI. I hope this article could provide some guidance, and maybe the prototype can be used to test some ideas out.
+
+## Prototype Project
+
+The project contains prototyp/demo code. The code is written in C using [Dear ImGui](https://github.com/ocornut/imgui) as the GUI library, and [Dear Bindings](https://github.com/dearimgui/dear_bindings) as C API. 
+
+### Building
+
+The project uses CMake for build config.
+
+- Install [CMake](https://cmake.org/)
+- Ensure CMake is in the user `PATH`
+- `mkdir build`
+- `cd build`
+- `cmake ..`
+- Build
+	- *Windows*: Open and build `build/array_merge.sln`
+	- *Linux*: use `cmake --build . -j$(nproc)`
+	- *macOS*: use `cmake --build . -j$(sysctl -n hw.ncpu)`
+
+You may need to adjust the debugger working directory in the IDE to `build/src`.
+
+> **Note**: the build currently uses a version of Dear Bindings that is not release yet, you will need `dear_bindings_docking_clang_withgeneratedefaultargfunctions.zip` from: https://github.com/dearimgui/dear_bindings/actions/runs/22354685115
+
+And you will need to adjust the `src/CmakeList.txt` to point to your file:
+```
+# DCIMGUI
+FetchContent_Declare(dcimgui_external
+#	URL https://github.com/dearimgui/dear_bindings/actions/runs/22354685115/artifacts/5636220484
+	URL file://C:/Users/memon/Downloads/dear_bindings_docking_clang_withgeneratedefaultargfunctions.zip
+	EXCLUDE_FROM_ALL
+)
+```	
