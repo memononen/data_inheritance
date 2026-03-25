@@ -23,13 +23,13 @@ We choose to represent the *base data* and *derived data* using the same data ty
 
 ![Inheritance Model](images/model.svg)
 
-Things get more complicated with containers like array. Big part of this article is try to explain how the extend the basic idea to work with containers.
+Things get more complicated with containers like arrays. A big part of this article is try to explain how the extend the basic idea to work with containers.
 
 There are two common ways to represent how the derived data differs from the base: delta (implicit), and flags (explicit). With the delta method, a simple diff is done after the data has been changed to find the items that are different compared to the base data. With the explicit flag method, data is marked as overridden when it is changed.
 
 We choose explicit flag, since it is just a lot simpler to implement. In both cases it is important that the override flag is set it will stay set, until the user clears it. Otherwise you get value drifts, which are really hard to debug and reason about.
 
-An example of value drift is that if base data has property A that is set to 2, and derived data now changes that to 3 and override flag is set. If base data is now changed to 3, the diff will think that no override is present, and any further changes to the base data will cause derived to change too. The cases I have had to debug, the drift has been super rate and has happened over long period of time (months).
+An example of value drift is that if base data has property A that is set to 2, and derived data now changes that to 3 and override flag is set. If base data is now changed to 3, the diff will think that no override is present, and any further changes to the base data will cause derived to change too. In the cases I have had to debug, the drift has been super rate and has happened over long period of time (months).
 
 
 ## The Override flag
@@ -80,7 +80,7 @@ That is, we simply just copy over that data that is not overridden.
 
 ![Enum UI](images/enum.png)
 
-We need to pay some extra attention when dealing with enum bitflags. One way to loo at the bit flags is to treat them as a set of boolean. That is, the bit name is kind of the variable name. This also implies that we need an override flag per enum bit. 
+We need to pay some extra attention when dealing with enum bitflags. One way to look at the bit flags is to treat them as a set of boolean. That is, the bit name is kind of the variable name. This also implies that we need an override flag per enum bit. 
 
 Let's say we add `hit_flags` bit flags to our collision shape, like this:
 
@@ -160,11 +160,11 @@ If the IDs of the items stored in the array need to be globally unique, the Arra
 
 ![Tag Collection UI](images/tag_collection.png)
 
-Set is a collection of items where each item exists inly once. This makes it really easy to relate the data between base and derived containers.
+A set is a collection of items where each item exists inly once. This makes it really easy to relate the data between base and derived containers.
 
-The most common use for set is gameplay tag collection, aka user-define-mega-enum. As already hinted, sets with finite amount of items can be thought as an extension of enum. 
+The most common use for set is gameplay tag collection, aka user-defined-mega-enum. As already hinted, sets with finite amount of items can be thought as an extension of enum. 
 
-To follow our override stragegy from previous example, we can define an overridable set with a regular array of tags that should be included, and another array of tags in meta data that describes the tags that has been overridden. Just like we did for enum bit flags.
+To follow our override strategy from previous example, we can define an overridable set with a regular array of tags that should be included, and another array of tags in meta data that describes the tags that has been overridden. Just like we did for enum bit flags.
 
 In this example we assume that each tag can be represented using an integer, in practice there is usually some central system that assigns ids to the tags, either via string interning or some other method.
 
@@ -215,7 +215,7 @@ void tags_update_inherited_data(const tag_container_t* tags_base, tag_container_
 
 We assume the order of the tags is not significant from the codes point of view. Usually we want to know if a tag exists, or iterate over all the tags.
 
-The above merge routine does not keep try the tags in any specific order. For UI consistency and to enforce their enumness, they are sorted so that the tags appear in same order in the tag picker and in the list.
+The above merge routine does not try keep try the tags in any specific order. For UI consistency and to enforce their enumness, they are sorted so that the tags appear in same order in the tag picker and in the list.
 
 
 ## Sorted Array
@@ -321,11 +321,11 @@ void gradient_update_inherited_data(const gradient_t* base_grad, gradient_t* der
 
 The merge looks very similar to the tag case, but the second loop is now more complicated as it needs to handle property override too. 
 
-We have also one extra loop, which will remove any discard overrides that don't exists anymore in the base. The thinking is that if an item is removed from base it should not ever come back, since we add unique ids to new items. There's once gotcha, though, if the user modifes base, then saves (which will trigger update), and then does undo, and saves again (update), then it is possible that the same id appears again. Other ways of undoing, like rolling back in version control has similar issues too. One option to handle this is to never automatically remove discard IDs.
+We have also one extra loop, which will remove any discard overrides that don't exists anymore in the base. The thinking is that if an item is removed from base it should not ever come back, since we add unique ids to new items. There's once gotcha, though, if the user modifes base, then saves (which will trigger update), and then does undo, and saves again (update), then it is possible that the same id appears again. Other ways of undoing, like rolling back in version control has similar issues too. One option to handle this is to never automatically remove discarded IDs.
 
 ## Un-ordered Array
 
-Unordered array can be implemented just like the sorted array, but just don't sort (doh!). It can be use useful for data that has spatial organization like node graph nodes. Or maybe you sort them by z-index, in which case it's sorted array again.
+Unordered array can be implemented just like the sorted array, but just don't sort (doh!). It can be useful for data that has spatial organization like node graph nodes. Or maybe you sort them by z-index, in which case it's sorted array again.
 
 
 ## Ordered Array
@@ -591,7 +591,7 @@ Reordering the items in base will not change the cluster sizes in derived. That 
 
 ### Alternatives ways to order the data
 
-Fracitonal indexing is a quite popular option for array ordering, especially in the web space. The idea is to assing and index (that is fractional) to each item, and use sorting to reorder the items after merge. When a new item is inserted, it's index is midway the adjacent items. This method has some down sides like: empty ranges (when two items are added to same location) and unbounded index length, and item interleaving (items added in same location will get mixed up). 
+Fractional indexing is a quite popular option for array ordering, especially in the web space. The idea is to assing an index (that is fractional) to each item, and use sorting to reorder the items after merge. When a new item is inserted, it's index is midway between the adjacent items. This method has some down sides like empty ranges (when two items are added to same location) and unbounded index length, and item interleaving (items added in same location will get mixed up). 
 
 Longest edit subsequence or longest increasing subsequence could be used to improve the alignment of the merged arrays. Particularly when items are reodered in the base array. I have tested with quite a few alignment options, and they work most of the time, but sometimes the results can be quite unpredictable, particularly if an item was rerdered to opposite end. Quite a bit of heuristics might be needed to get stable feeling results.
 
@@ -617,7 +617,7 @@ One option to implement maps is to just treat them as ordered arrays, then add v
 
 So far we have dealt with items with IDs which are locally identified per container. The IDs have influence only across the chain of derived assets.
 
-There are cases where the ID assgined to an item represent an object in the whole system or within an asset. In such cases we need to store extra data to match the IDs to their couter part in base data, we call this addition reference `base_id`.
+There are cases where the ID assgined to an item represents an object in the whole system or within an asset. In such cases we need to store extra data to match the IDs to their couter part in base data, we call this addition reference `base_id`.
 
 ![Inheritance](images/inheritance.svg)
 
@@ -746,7 +746,7 @@ We should also have a way to indicate that there are overrides within a data con
 
 The override indicator also should be granular enough that if you have laid out multiple widgets on the same row, each of them can be highlighted out separately.
 
-One property that is invisble is the array item order. I tested with various ways to visualize that, but they all felt really heavy. In the end I settled on just showing that "something has changed on thos row". I feel like some indicator would be in order.
+One property that is invisble is the array item order. I tested with various ways to visualize that, but they all felt really heavy. In the end I settled on just showing that "something has changed on these rows". I feel like some indicator would be in order.
 
 ![Gradient UI](images/gradient.png)
 
