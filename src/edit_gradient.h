@@ -11,13 +11,13 @@ enum {
 };
 
 typedef struct color_stop {
-	float t;
+	float pos;
 	ImVec4 color;
 	// Meta
 	uid_t id;
 	bool is_inserted;
 	bool override_color;
-	bool override_t;
+	bool override_pos;
 } color_stop_t;
 
 typedef struct gradient {

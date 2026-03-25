@@ -1,29 +1,35 @@
 # Data Inheritance
 
-![Image of Data Inheritance protoytype](images/header.png)
+![Image of Data Inheritance prototype](images/header.png)
 
-This article and source code tries to explain a simple model for data inheritance. Data inheritance means that you can compose data based on existing data, override values, and any changes to the base data will update to the deried data when it is changed. 
+This article and source code explains a simple implementation of data inheritance. Data inheritance means that you can create variations of existing data, override values, and any changes to the base data will update to the deried data when it is changed.
 
-Prefabs, prefabs variants, and nested prefabs is the most common applications of data inheritance in game dev. But it does not need to be limited to just that. Any asset or data type could and should support data inheritance. This article tried to lay down some tools to be able to do that.
+Prefabs, prefabs variants, and nested prefabs are the most common applications of data inheritance in game dev. But it does not need to be limited to just that. Any asset or data type could and should support data inheritance. This article tries to lay down some tools to be able to do that.
 
-The whole stack for game data often looks like this:
+The whole stack for a data asset could look like this:
 
 - **Data Inheritance**: abstraction over how to transfer changes to base data to derived data
-- **Hierarchical data**: abstraction over composing data from types (e.g. json, entities & components)
+- **Hierarchical data**: abstraction over composing data from different types of data (e.g. entities & components, json)
 - **Type System and Reflection**: abstraction over types and properties
 - **Serialization**: abstraction over how data gets stored one disk or buffers
-- **Asset Database**: abstraction over how asset refercing works
+- **Asset Database**: abstraction over how assets are loaded and referenced
 
 This article focuses on the **data inheritance** specifically to make the concepts easy to follow.
 
 
 ## Inheritance Model
 
-We choose to represent the base data and derived data exactly the same way, and meta data, an override flag, to indicate if the value is different from the base data. This allows the derived data to be as fast and easy to access as the base, and it is even possible to snapshot a version an wipeout all the meta data for a release version of asset.
+We choose to represent the *base data* and *derived data* using the same data types, structs in the examples below. In addition, we have meta data, an override flag, that is used to indicate if the value is different from the base data. This allows the derived data to be as fast and easy to access as the base, and it is even possible to snapshot a version an wipeout all the meta data for a release version of asset.
 
-To detect the data changes, there are two common ways to represent the data override: delta (implicit), and flags (explicit). With the delta method, a simple diff is done after the data has been changed to find the items that are different compared to the base data. With the flag method, data is marked as overridden when it is changed.
+![Inheritance Model](images/model.svg)
 
-We choose expliciti flags, since it is just a lot simpler to implement.
+Things get more complicated with containers like array. Big part of this article is try to explain how the extend the basic idea to work with containers.
+
+There are two common ways to represent how the derived data differs from the base: delta (implicit), and flags (explicit). With the delta method, a simple diff is done after the data has been changed to find the items that are different compared to the base data. With the explicit flag method, data is marked as overridden when it is changed.
+
+We choose explicit flag, since it is just a lot simpler to implement. In both cases it is important that the override flag is set it will stay set, until the user clears it. Otherwise you get value drifts, which are really hard to debug and reason about.
+
+An example of value drift is that if base data has property A that is set to 2, and derived data now changes that to 3 and override flag is set. If base data is now changed to 3, the diff will think that no override is present, and any further changes to the base data will cause derived to change too. The cases I have had to debug, the drift has been super rate and has happened over long period of time (months).
 
 
 ## The Override flag
@@ -32,7 +38,7 @@ The override flag works simply by having a bit of extra information in the deriv
 
 ```C
 struct {
-	CollisionShapeType type;
+	shape_type_t type;
 	float size;
 	// Meta
 	bool override_type;
@@ -40,20 +46,21 @@ struct {
 } collision_shape_t;
 ```
 
-To set a value, you would do this:
+For every bit of data, we have associated override flag. To set a value, you would do this:
 
-```
+```C
 void set_size(collision_shape_t* shape, float new_size)
 {
 	shape->size = new_size;
+	// Only set the flag is we're working with derived object.
 	if (shape_is_derived(shape))
-		shape->override_size;	
+		shape->override_size = true;
 }
 ```
 
-I'm intentionally leaving out the implementation of `shape_is_derived()` as I imagine it is part of the **Hierarchical Data** level depicted above. In essence, the file, or component or node should know if it is derived and where to find the base data.
+I'm intentionally leaving out the implementation of `shape_is_derived()` as I imagine it is part of the *Hierarchical Data* level depicted above. The overal data container, the file, or component, or node should know if it is derived and where to find the base data.
 
-And to update the data from base to derived, we can simply do this:
+To update the data from base to derived, we can simply do this:
 
 ```C
 void update_inherited_data(const collision_shape_t* base, collision_shape_t* derived)
@@ -69,9 +76,9 @@ That is, we simply just copy over that data that is not overridden.
 
 ### Enums Bitflags
 
-Enum flags are a bit special, and can be thought as a set of booleans, so we need an override flag per enum flag. 
+We need to pay some extra attention when dealing with enum bitflags. One way to loo at the bit flags is to treat them as a set of boolean. That is, the bit name is kind of the variable name. This also implies that we need an override flag per enum bit. 
 
-Let's say we add `hit_flags`anum bitflags to our collision shape, like this:
+Let's say we add `hit_flags` bit flags to our collision shape, like this:
 
 ```C
 typedef enum {
@@ -80,7 +87,7 @@ typedef enum {
 	HIT_SENSOR = 1 << 2,
 } hit_flags_t;
 
-struct {
+typedef struct {
 	shape_type_t type;
 	float size;
 	uint8_t hit_flags;
@@ -91,13 +98,17 @@ struct {
 } collision_shape_t;
 ```
 
-We use the same storage type and same flags for the override as we use for the bit flags. We can use cool bitmask trick to copy the overridden bits over without conditions:
+Than we can use the same storage type and same bits for the override as we use for the bit flags. As we set or clear a bit, we also set the associated override bit.
+
+We can use cool bitmask trick to copy the overridden bits over without conditions:
 
 ```C
 void update_inherited_data(const collision_shape_t* base, collision_shape_t* derived)
 {
 	...
-	derived->hit_flags = (derived->hit_flags & derived->override_hit_flags) | (base->hit_flags & ~derived->override_hit_flags);
+	derived->hit_flags = 
+		(derived->hit_flags & derived->override_hit_flags) 
+		| (base->hit_flags & ~derived->override_hit_flags);
 }
 ```
 
@@ -105,42 +116,51 @@ That is: `(overridden bits from derived) | (non-overridden bits from base)`.
 
 (Interestingly there is a trick to do that in just 3 instructions: https://realtimecollisiondetection.net/blog/?p=90)
 
-If all of the above looks tedious, it can all be totally automated using a reflection system. In that case you probably want to store the meta data on seprate collection, which makes it even simpler to strip it out if you want to disable the inheritance for your release data.
+All of the above looks very repetitive, and it can be quite easily automated using a reflection system and some per property attributes. In the automated case you probably want to store the meta data on separate collection, which makes it even simpler to strip it out if you want to disable the inheritance for your release data.
+
 
 ## Collections
 
-Things get a bit more complicated when we have arrays of data. How do we match the array entries between base and derived data? What if someone removes and item from base, or what if inherited item is deleted in the derived data? Or added, or reordered?
+Things get more complicated when we have arrays of data. We have to consider things like how do we match the array entries between base and derived data? What if someone removes an item from base, or what if we delete an item in derived that is also present in base? Or add a new item, or reorder items?
 
-So the main challanges are: how do we relate data between base and derived data, and how to maintain the order of the data. Next we'll look into a couple of different solutions for common use cases.
+So the main challanges are: 
+- how do we relate data between base and derived data?
+- and, how to maintain the order of the data?
+
+Next we'll look into a couple of different solutions for common use cases.
  
-One more thing to note about arrays is that, the arrays we use to store values can have different semantics. Sometimes we want only unique items (a set), sometimes the order matters, sometimes does not, and sometimes the order comes from the data itself.
+One more thing to note about arrays is that, the arrays we use to store values can have different use semantics. Sometimes we want only unique items (a set), sometimes the order matters, sometimes does not, and sometimes the order can be deduced from the data itself.
 
-Here we're going to look 4 differnt types of containers which cover most of the use cases for creative tools and games:
+We're going to look 6 differnt types of containers which cover most of the use cases for creative tools and games:
 - **Set**: we want a collection of items that are all unique, for example a tag container.
 - **Sorted Array**: we store items in an array, but the order comes from sort, for example a curve or gradient.
 - **Un-ordered Array**: we store items in an array, but the order does not matter at all, for example node graph nodes
 - **Ordered Array**: the items in the array have specific order and we want to maintain it, or we want to keep the order to allow the user to organize the array, for example a todo list. 
-- **Map**: each item in the collection is identified by unique data the user can set, for example button bindings table.
+- **Ordered Map**: each item in the collection is identified by unique data the user can set, for example button bindings table.
 - **Array of Objects**: there are special conciderations for objects, for example node hierarchy.
 
 ### Which Type to Choose?
 
-In general we should allow users to organize their data. For that reason many of the types in the list are ordered. There are many use case where the ordering does not matter for the same of functionality, but it might be important to organize the data.
+In general we should allow users to organize their data, and this might contradict to what the container type does (sets and maps). For that reason many of the types in the list are ordered. There are many use case where the ordering does not matter for code functionality, but it might be important to allow the users to organize the data.
 
-Sorted arrays are good for cases where the data is always strictly ordered based on the data. Good example are timelines, gradients and value based lookup tables, where the data's location in time is their natural ordering.
+Sorted arrays is an example where the data is always strictly ordered based on the properties of the data. Some examples are timelines, gradients and value based lookup tables, where the data's position is their natural ordering.
 
-Sets work well for enum type of data, like tags or collection of actual enums. That way they usually have some specific internal ordering, as well as compact data representation. Ordered sets are better choice for other cases where some data will identify an iten uniquely, but we may also have some additional payload, like mapping buttons to actions.
+Sets work well for enum type of data, like tags or collection of actual enums. That way they usually have some specific internal ordering, as well as compact data representation. 
 
-If the ID of the items stored in the array need to be globally unique, the ordered array of objects covers the details for that. The details presented in that section can be also applied to non-sorted array of object.
+Maps are really hard to represent in the UI, and an ordered array with editing validation and addition index for faster lookup is just about always the right choice. This covers things like mapping buttons to actions.
+
+If the IDs of the items stored in the array need to be globally unique, the Array of Objects covers the issues related to that. The details presented in that section can be also applied to non-sorted array of objects.
 
 
 ## Set
 
 Set is a collection of items where each item exists inly once. This makes it really easy to relate the data between base and derived containers.
 
-The most common use for set is gameplay tag collection, aka user-define-mega-enum. Sets whose values are defined externaly can be thought as an extension of enum. 
+The most common use for set is gameplay tag collection, aka user-define-mega-enum. As already hinted, sets with finite amount of items can be thought as an extension of enum. 
 
-To follow our override stragegy from previous example, we can define overridable set with an array of tags that should be included, and another array of tags in meta data that describes the tags that has been overridden. In this example we assume that each tag can be represented using an integer, in practice there is some central system that assigns ids to the tags, either via string interning or some other method.
+To follow our override stragegy from previous example, we can define an overridable set with a regular array of tags that should be included, and another array of tags in meta data that describes the tags that has been overridden. Just like we did for enum bit flags.
+
+In this example we assume that each tag can be represented using an integer, in practice there is usually some central system that assigns ids to the tags, either via string interning or some other method.
 
 ```C
 typedef int32_t tag_t; 
@@ -154,7 +174,7 @@ typedef struct {
 } tag_container_t;
 ```
 
-If the user adds or removes tag on the derived tag container, then we add unique entry to `overrides` (the same way we added a bit to the enum flags). Also, if the user removes a tag in derived that exists in base, then there is no tag in `tags`, but one exists in `overrides`.
+If the user adds or removes tag on the derived tag container, then we add unique entry to `overrides` (the same way we added a bit to the enum flags). That is, the values in the `overrides` describe if the specific tag was ever changed, and `tags` describe their existence.
 
 The merging is the same as with enum too, `(overridden tags from derived) | (non-overridden tags from base)`.
 
@@ -187,32 +207,32 @@ void tags_update_inherited_data(const tag_container_t* tags_base, tag_container_
 }
 ```
 
-We assume the order of the tags is not significant from their use point of view. Usually we want to know if a tag exists, or iterate over all the tags.
+We assume the order of the tags is not significant from the codes point of view. Usually we want to know if a tag exists, or iterate over all the tags.
 
-The above merge does not keep the tags in any consistent order. For consistency in the UI, they are sorted so that the tags appear in same order in the picker and in the list.
+The above merge routine does not keep try the tags in any specific order. For UI consistency and to enforce their enumness, they are sorted so that the tags appear in same order in the tag picker and in the list.
 
 
 ## Sorted Array
 
-In order to be able to relate data between base and derived we need something to identify the items uniquely. For set, the items we stored in the array were also the unique identifiers. But if we want to store arbitrary data, then we need to resort to additional unique identifier per item. Every time a new item is added to the array, it will be assigned a new unique id.
+In order to be able to relate data between base and derived, we need something to identify the items uniquely for scross referencing. For the set, the items that we stored in the array were also the unique identifiers. But if we want to store arbitrary data, then we need to resort to additional unique identifier per item. Every time a new item is added to the array, it will be assigned a new unique ID.
 
-The simplest thing is a random UID. Using random UIDs allows anyone anywhere to create new IDs without the risk of fearing that two will collide with others. This is important in terms of the inheritance, but also for merging changes via version control. The chance of collision will depend on the size of the UID, 8 bytes might be ok, 16 bytes is quite generally accepted as solid base.
+The simplest thing is a random UID. Using random UIDs allows anyone anywhere to create new IDs without the risk of fearing that two will collide with others (fingers crossed!). This is important in terms of the inheritance, but also for merging changes via version control. The chance of collision will depend on the size of the UID, 8 bytes might be ok, 16 bytes is quite generally accepted as solid base.
 
-Note: In the example code we will use 2 byte pseudo random IDs so that they are easy to visually debug. Do not use 2 bytes in production!
+| **Note**: In the example code we will use 2 byte pseudo random IDs so that they are easy to visually debug. Do not use 2 bytes in production!
 
-Since we are also storing other info, we can rethink how we store our overrides. We still need to know which items in the array are created or removed on the derived data. For the items that are new on derived data we could store a flag that indicates that they are added. In addition we will need an array of overrides, list like before, for the items that were removed from the base in the derived data. We will call this array of ids discarded list.
+Since we are also more than unique IDs, we can rethink how we store our overrides. We still need to know which items in the array are inserted or removed compared to the base data. For the items that are new on derived data we could store a flag that indicates that they are inserted. Since removed items do not have any representation, we need a separate array, like our previous overrides array to store the items that exiists in base but are removed in derived data. We call this *discarded list* to avoid confusion with other uses of removed.
 
 Now our data could look as follows.
 
 ```C
-typedef struct color_stop {
-	float t;
+typedef struct {
+	float pos;
 	ImVec4 color;
 	// Meta
 	uid_t id;
 	bool is_inserted;
 	bool override_color;
-	bool override_t;
+	bool override_pos;
 } color_stop_t;
 
 typedef struct gradient {
@@ -226,11 +246,11 @@ typedef struct gradient {
 
 We are defining data for a gradient, where each color stop stores `is_inserted` if the stop was added to the derived data, and per property overrides, just like in our collision shape example in the beginning.
 
-In addition to the color stops, the gradient also stores discarded list as meta data. This list contains the ids of the color stops in base which were removed.
+In addition to the color stops, the gradient also stores discarded list as meta data. This list contains the IDs of the color stops in base which were removed from derived.
 
-That is, items with `is_inserted` and the discarded list together forms the override list.
+That is, items with `is_inserted` and the discarded list together forms the *override list* from earlier example.
 
-Since the items in the gradient are organized based on their location on the color line, we can use that as the key to sort the items.
+Since the items in the gradient are organized based on their position on the color line, we can use that as the key to sort the items.
 
 ```C
 void gradient_update_inherited_data(const gradient_t* base_grad, gradient_t* derived_grad)
@@ -246,7 +266,7 @@ void gradient_update_inherited_data(const gradient_t* base_grad, gradient_t* der
 			result_stops[result_stops_count++] = *stop;
 	}
 
-	// Keep stops from base which are not overridden, and update property overrides.
+	// Keep stops from base which are not overridden, and update property.
 	for (int32_t i = 0; i < base_grad->stops_count; i++) {
 		const color_stop_t* stop = &base_grad->stops[i];
 		// if we have discard override, just skip.
@@ -288,12 +308,12 @@ void gradient_update_inherited_data(const gradient_t* base_grad, gradient_t* der
 	derived_grad->stops_count = result_stops_count;
 
 	gradient_sort(derived_grad);
-}	
+}
 ```
 
 The merge looks very similar to the tag case, but the second loop is now more complicated as it needs to handle property override too. 
 
-We have also one extra loop, which will remove any discard overrides that cannot exists anymore in the parent. If an item is removed from parent it should not ever come back, since we add unique ids to new items. There is once gotcha, though, if the user modifes base, then saves (which will trigger update), and then does undo, and saves again (update), then it is possible that the same id appears again. Other ways of undoing, like rolling back in version control has similar issues too.
+We have also one extra loop, which will remove any discard overrides that don't exists anymore in the base. The thinking is that if an item is removed from base it should not ever come back, since we add unique ids to new items. There's once gotcha, though, if the user modifes base, then saves (which will trigger update), and then does undo, and saves again (update), then it is possible that the same id appears again. Other ways of undoing, like rolling back in version control has similar issues too. One option to handle this is to never automatically remove discard IDs.
 
 ## Un-ordered Array
 
@@ -302,13 +322,13 @@ Unordered array can be implemented just like the sorted array, but just don't so
 
 ## Ordered Array
 
-The basic idea of unique ids, per item override flag, and discard list also applies to ordered arrays. The additional detail we need to handle is that output of the update inherited data function will somewhat maintain the order of the items.
+The basic idea of unique IDs, per item override flag, and discard list also applies to ordered arrays. The additional detail we need to handle is that output of the update inherited data function will need to maintain the order of the items.
 
 There is no perfect solution to this, as the array simply does not capture enough intent from the user. As simple example, if you add new item to the array at the same location both in base and derived, which one should come first? Or if you added 3 items, should the new items interleaved, or should we merge them as clusters in the order they were added in base or derived? Since it is messy, let's put down some things we wish from the ordered merge:
 
-- Maintain order:
+- *Maintain order*:
 	- we assume that modifications in the derived data are in the order the user intended
-- Maintain clusters:
+- **Maintain clusters:
 	- we assume that items that were modified together should stay together
 - Handle common operations predictably:
 	- items added to to the end of the derived array should be kept there
@@ -341,10 +361,10 @@ typedef struct action_map {
 } action_map_t;
 ```
 
-The `is_inserted` per action works the same as before, so does the property overrides, there is new override `override_array_index` which indicates that we have modified the (implicit) ordering and we want to keep it in derived. The container is the same as before, we have list of items, and discarded list.
+The `is_inserted` per action works the same as before, so does the property overrides, there is new override `override_array_index` which indicates that we have modified the (implicit) ordering and we want to keep the item similarly positioned as it currently is in the derived array. The container is build simiarly as before, we have list of items, and discarded list.
 
 
-To help us with the ordered merge, we will add an intermediate representation of the items:
+To help us to create a reusable merge, we will make an intermediate representation of the items that is temporarily used during the merge:
 
 ```C
 typedef struct merge_item {
@@ -362,7 +382,7 @@ typedef struct array_merge {
 } merge_array_t;
 ```
 
-We will make a merge array for both the base and derived data. The `id` is the id of the data to be ordered, we only care about the IDs that are shared by base and derided, so new items in derived array can set the id to invalid. The `base_idx` and `derived_idx` desribe the index of the given item in either array. Fianlly `is_pinned` is used only for the derived array, and it marks items which we want to keep in specific order in the output.
+We will make a merge array for both the *base* and *derived* data. The `id` is the ID of the item, we only care about the IDs that are shared by base and derided. The `base_idx` and `derived_idx` desribe the index of the given item in either array. Finally `is_pinned` is used only for the derived array, and it marks items which we want to keep in specific order in the output.
 
 We convert from our list of structs to the merge arrays like this:
 
@@ -397,9 +417,9 @@ void actions_update_inherited_data(const action_map_t* base_actions, action_map_
 
 For the base merge array we set the `base_idx` and for the derived array we set the `derived_idx`, the first part of the merge process will match the items between the arrays and update the corresponding indices.
 
-Items which have invalid `derived_idx` in the base array mean items that are missing in the derived array, and items with invalid `base_idx` in the derived array means items that are insert in addition to the base items.
+Items which have invalid `derived_idx` in the base array mean items that are missing in the derived array, and items with invalid `base_idx` in the derived array means items that they are insert in only in derived array. The inserted items' IDs are left blank, since we know that they are not represented in the base. 
 
-The indicas are also later used to quickly relocation the original data when we reoder the actual items.
+The indices are later used to quickly relocation the original data when we reoder the actual items.
 
 We set the `is_pinned` to all items in the derived merge array, that we wish to be keep in their current order in the final output. Here we have chosen to keep items that are inserted into the derived, and items that have neem reordered in the derived array. 
 
@@ -508,9 +528,9 @@ void merge_array_reconcile_ordered(merge_array_t* base, merge_array_t* derived)
 	...
 ```
 
-In the first loop we match items between base and derived, and update the indices of the items that match. Then we remove all the discarded items from the base array as if they never existed. After this the derived array contains runs of overridden (pinned, inserted or reodered items), and runs of items that are copied from the base data. The base array contains only the items that we should carry over to the derived data.
+In the first loop we match items between base and derived, and exchange the indices of the items that match. Then we remove all the discarded items from the base array as if they never existed. After this the derived array contains runs of pinned items (inserted or reodered), and runs of items that should be copied from the base data as is. The base array contains only the items that we should carry over to the derived data.
 
-The main idea of the next step is to iterate both arrays in parallel, and take overridden (pinned) items from the derived array, and non-overridden items from the base. We are going to use the derived array as template. If there is a run of pinned items in the derived array, we will take them. For a run of non-pinned items, we take equal amount of items from base. If we encounter new item while we are adding items from base, they will be added "for free" and do not reduce the count we set to copy from.
+The main idea of the next merge step is to iterate both arrays in lock step, and take pinned (overridden) items from the derived array, and non-pinned items from the base. We are going to use the derived array as template for ordering. If there is a run of pinned items in the derived array, we will take them. For a run of non-pinned items, we take equal amount of (non-pinned) items from base. If we encounter new item from base while we are adding items from base, they will be added "for free" and do not contribute against the count we set to copy from.
 
 ```C
 	...
@@ -558,27 +578,29 @@ The main idea of the next step is to iterate both arrays in parallel, and take o
 		derived->items[i] = results[i];
 }
 ```
+The result will combine items from base and derived in order they appear in each array. Clusters of changes in derived are maintained, and changes in base appear in the nearest cluster of items from base.
 
-This will keep the order and clusters of overridden derived data, also making sure that any item added to the base will land in the nearest non-overridden run in the derived data. Reordering the items in base will not affect the ordering of the derived data.
+Reordering the items in base will not change the cluster sizes in derived. That is, if you inserted item F after item A from base in the derived data, and item A is reordered, item F will not move along. This might not be always expected, but makes the merge more predictable. Clusters of items at the start and end of array will always keep their position.
 
-### Alternatives
+
+### Alternatives ways to order the data
 
 Fracitonal indexing is a quite popular option for array ordering, especially in the web space. The idea is to assing and index (that is fractional) to each item, and use sorting to reorder the items after merge. When a new item is inserted, it's index is midway the adjacent items. This method has some down sides like: empty ranges (when two items are added to same location) and unbounded index length, and item interleaving (items added in same location will get mixed up). 
 
 Longest edit subsequence or longest increasing subsequence could be used to improve the alignment of the merged arrays. Particularly when items are reodered in the base array. I have tested with quite a few alignment options, and they work most of the time, but sometimes the results can be quite unpredictable, particularly if an item was rerdered to opposite end. Quite a bit of heuristics might be needed to get stable feeling results.
 
-## Map
+## Ordered Map
 
 Maps and Set both are _exceptionally_ hard to handle in the user interface, even without any data inheritance.
 
 For example, we might have a mapping from button codes to actions, say we start with this map:
 
-- Button A -> Jump
-- Button B -> Fire
+- **Button A** -> Jump
+- **Button B** -> Fire
 
-Now if we wanted to switch over the buttons, might first change the first item's key from A to B. But that would override the existing B and we would loose data. Sets have similar issue, for that reason they are better left for data that can be thought as tags containers and such.
+Now if we wanted to switch over the buttons in the UI, might change the first item's key from **A** to **B**. But that would override the existing **B** and we would loose data. Sets have similar issue, and should left for data that can be thought as tags containers and such.
 
-One option to implement maps is to just treat them as ordered lists, add validation, and lookup index. Ordered list had predictable UI workflows, and you can use validation to mark duplicate entries. A separate lookup index allows map-like fast query, and graceful handling of duplicates (e.g. do not add duplicates, or last item wins, etc).
+One option to implement maps is to just treat them as ordered arrays, then add validation and lookup index. Ordered array has predictable UI workflows, and you can use validation to mark duplicate entries. A separate lookup index allows map-like fast query, and graceful handling of duplicates (e.g. do not add duplicates, or last item wins, etc).
 
 
 ## Array of Objects

@@ -59,7 +59,7 @@ typedef struct command {
 	int32_t idx;
 	int32_t target_idx;
 	int32_t base_id;
-	float t;
+	float pos;
 } command_t;
 
 static inline command_t command_make_insert_at(int32_t idx)
@@ -80,11 +80,11 @@ static inline command_t command_make_insert_at_base_id(int32_t idx, int32_t base
 	};
 }
 
-static inline command_t command_make_insert_at_t(float t)
+static inline command_t command_make_insert_at_pos(float t)
 {
 	return (command_t) {
 		.type = COMMAND_INSERT_AT,
-		.t = t,
+		.pos = t,
 	};
 }
 

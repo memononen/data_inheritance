@@ -13,7 +13,7 @@ uid_t gradient_add(gradient_t* grad, float t, ImVec4 color)
 {
 	if (grad->stops_count >= MAX_COLOR_STOPS) return 0;
 	int32_t idx = grad->stops_count++;
-	grad->stops[idx].t = t;
+	grad->stops[idx].pos = t;
 	grad->stops[idx].color = color;
 	grad->stops[idx].id = gen_id();
 	return grad->stops[idx].id;
@@ -158,12 +158,12 @@ int32_t gradient_get_discarded_count(gradient_t* grad)
 
 bool color_stop_has_overrides(const color_stop_t* stop)
 {
-	return stop->override_color || stop->override_t;
+	return stop->override_color || stop->override_pos;
 }
 
 void color_stop_clear_overrides(color_stop_t* stop)
 {
-	stop->override_t = false;
+	stop->override_pos = false;
 	stop->override_color = false;
 }
 
@@ -173,8 +173,8 @@ static int color_stop_cmp(const void* a, const void* b)
 {
 	const color_stop_t* sa = a;
 	const color_stop_t* sb = b;
-	if (sa->t < sb->t) return -1;
-	if (sa->t > sb->t) return 1;
+	if (sa->pos < sb->pos) return -1;
+	if (sa->pos > sb->pos) return 1;
 	return 0;
 }
 
@@ -189,15 +189,15 @@ ImVec4 interpolate(const color_stop_t* stops, int32_t count, float t)
 		return (ImVec4){0,0,0,1};
 	if (count == 1)
 		return stops[0].color;
-	if (t <= stops[0].t)
+	if (t <= stops[0].pos)
 		return stops[0].color;
-	if (t >= stops[count-1].t)
+	if (t >= stops[count-1].pos)
 		return stops[count-1].color;
 
 	for (int32_t i = 1; i < count; i++) {
-		if (t < stops[i].t) {
-			float t0 = t - stops[i-1].t;
-			float range = stops[i].t - stops[i-1].t;
+		if (t < stops[i].pos) {
+			float t0 = t - stops[i-1].pos;
+			float range = stops[i].pos - stops[i-1].pos;
 			float u = range > 1e-6f ? clampf(t0 / range, 0.f, 1.f) : 0.f;
 			return (ImVec4) {
 				.x = stops[i-1].color.x + (stops[i].color.x - stops[i-1].color.x) * u,
@@ -236,7 +236,7 @@ void gradient_update_inherited_data(const gradient_t* base_grad, gradient_t* der
 		if (derived_idx == INVALID_INDEX) {
 			// The item exists only in base, copy over (without base overrides).
 			color_stop_t new_stop = {
-				.t = stop->t,
+				.pos = stop->pos,
 				.color = stop->color,
 				.id = stop->id,
 			};
@@ -248,8 +248,8 @@ void gradient_update_inherited_data(const gradient_t* base_grad, gradient_t* der
 			color_stop_t existing_stop = derived_grad->stops[derived_idx];
 			assert(!existing_stop.is_inserted);
 			// Inherit data
-			if (!existing_stop.override_t)
-				existing_stop.t = stop->t;
+			if (!existing_stop.override_pos)
+				existing_stop.pos = stop->pos;
 			if (!existing_stop.override_color)
 				existing_stop.color = stop->color;
 			assert(result_stops_count < MAX_COLOR_STOPS);
@@ -300,7 +300,7 @@ edit_color_stop_key_result_t edit_color_stop_key(gradient_t* grad, int32_t idx, 
 
 	const float min_x = view_min.x;
 	const float max_x = view_max.x;
-	const float x = min_x + clampf(stop->t, 0.f, 1.0f) * (max_x - min_x) - key_width/2;
+	const float x = min_x + clampf(stop->pos, 0.f, 1.0f) * (max_x - min_x) - key_width/2;
 
 	ImVec2 pos = { .x = x, .y = view_min.y };
 	ImVec2 size = { .x = key_width, .y = view_max.y - view_min.y };
@@ -317,7 +317,7 @@ edit_color_stop_key_result_t edit_color_stop_key(gradient_t* grad, int32_t idx, 
 
 	if (ImGui_IsItemActivated()) {
 		drag_start_mouse_pos = ImGui_GetMousePos();
-		drag_start_t = stop->t;
+		drag_start_t = stop->pos;
 	}
 	if (ImGui_IsItemActive()) {
 		ImVec2 mouse_pos = ImGui_GetMousePos();
@@ -329,9 +329,9 @@ edit_color_stop_key_result_t edit_color_stop_key(gradient_t* grad, int32_t idx, 
 			const float range_x = max_x - min_x;
 			if (range_x > 1.f) {
 				float dt = mouse_dx / range_x;
-				stop->t = clampf(drag_start_t + dt, 0.f, 1.f);
+				stop->pos = clampf(drag_start_t + dt, 0.f, 1.f);
 				if (is_derived && !stop->is_inserted)
-					stop->override_t = true;
+					stop->override_pos = true;
 			}
 		}
 	}
@@ -398,7 +398,7 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 	array_header_state_t header = edit_array_header("Gradient", grad->stops_count, header_flags);
 
 	if (header.add_is_clicked) {
-		command = command_make_insert_at_t(-1.f);
+		command = command_make_insert_at_pos(-1.f);
 	}
 	if (header.add_is_tooltip_hovered)
 		ImGui_SetTooltip("Add new color stop.");
@@ -433,7 +433,7 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 					const color_stop_t* base_item = base_idx != INVALID_INDEX ? &base_grad->stops[base_idx] : NULL;
 					if (base_item) {
 						char label[64];
-						snprintf(label, sizeof(label), "Color Stop at %.3f", base_item->t);
+						snprintf(label, sizeof(label), "Color Stop at %.3f", base_item->pos);
 						if (ImGui_MenuItem(label)) {
 							command = command_make_revert_discarded(grad->discarded[i]);
 						}
@@ -455,7 +455,7 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 				const int32_t base_idx = gradient_index_of(base_grad, grad->discarded[i]);
 				const color_stop_t* base_item = base_idx != INVALID_INDEX ? &base_grad->stops[base_idx] : NULL;
 				if (base_item) {
-					ImGui_Text("Color Stop at %.3f", base_item->t);
+					ImGui_Text("Color Stop at %.3f", base_item->pos);
 				}
 			}
 			ImGui_EndTooltip();
@@ -484,7 +484,7 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 		float prev_x = bmin.x;
 		ImU32 prev_color = ImGui_GetColorU32ImVec4(stops[0].color);
 		for (int32_t i = 0; i < grad->stops_count; i++) {
-			float x = bmin.x + stops[i].t * (bmax.x - bmin.x);
+			float x = bmin.x + stops[i].pos * (bmax.x - bmin.x);
 			ImU32 color = ImGui_GetColorU32ImVec4(stops[i].color);
 			ImDrawList_AddRectFilledMultiColor(draw_list, (ImVec2){ prev_x, bmin.y }, (ImVec2){x, bmax.y}, prev_color, color, color, prev_color);
 			prev_x = x;
@@ -500,7 +500,7 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 		if (ImGui_IsItemClicked() && ImGui_IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
 			const ImVec2 mouse_pos = ImGui_GetMousePos();
 			const float mouse_t = clampf((mouse_pos.x - bmin.x) / (bmax.x - bmin.x), 0.f, 1.f);
-			command = command_make_insert_at_t(mouse_t);
+			command = command_make_insert_at_pos(mouse_t);
 		}
 
 		// Edit color stops on the gradient.
@@ -564,8 +564,8 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 					if (ImGui_MenuItemWithIconEx("Revert All", ICON_ARROW_BACK, NULL, false, item_has_overrides || item_is_override)) {
 						command = command_make_revert_at(i);
 					}
-					if (ImGui_MenuItemWithIconEx("Revert property Position", ICON_EDIT, NULL, false, stop->override_t)) {
-						stop->override_t = false;
+					if (ImGui_MenuItemWithIconEx("Revert property Position", ICON_EDIT, NULL, false, stop->override_pos)) {
+						stop->override_pos = false;
 						changed = true;
 					}
 					if (ImGui_MenuItemWithIconEx("Revert property Color", ICON_EDIT, NULL, false, stop->override_color)) {
@@ -586,14 +586,14 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 
 			// Stop position
 			ImGui_PackNextSlot(ImGui_MeasureFrame(3.f), ImGuiPack_Start, ImGuiAlign_Center);
-			if (ImGui_InputFloat("##T", &stop->t)) {
-				stop->t = clampf(stop->t, 0.f, 1.f);
+			if (ImGui_InputFloat("##pos", &stop->pos)) {
+				stop->pos = clampf(stop->pos, 0.f, 1.f);
 				if (is_derived && !stop->is_inserted)
-					stop->override_t = true;
+					stop->override_pos = true;
 				changed = true;
 			}
 			if (is_derived)
-				override_marker_overlay(ImGui_GetItemRect(), stop->override_t, false);
+				override_marker_overlay(ImGui_GetItemRect(), stop->override_pos, false);
 
 			// Color
 			ImGui_PackNextSlotPct(1.f, row_h, ImGuiPack_Start, ImGuiAlign_Center);
@@ -616,22 +616,22 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 
 	if (command.type == COMMAND_INSERT_AT) {
 		color_stop_t new_stop = { .id = gen_id() };
-		if (command.t < 0.f) {
+		if (command.pos < 0.f) {
 			// From add button
 			if (grad->stops_count == 0) {
-				new_stop.t = 0.f;
+				new_stop.pos = 0.f;
 				new_stop.color = (ImVec4){1,1,1,1};
 			} else if (grad->stops_count == 1) {
-				new_stop.t = (grad->stops[0].t < 0.5f) ? 1.f : 0.f;
+				new_stop.pos = (grad->stops[0].pos < 0.5f) ? 1.f : 0.f;
 				new_stop.color = (ImVec4){0.25f,0.25f,0.25f,1};
 			} else {
-				new_stop.t = (grad->stops[grad->stops_count-2].t + grad->stops[grad->stops_count-1].t) * 0.5f;
-				new_stop.color = interpolate(stops, grad->stops_count, new_stop.t);
+				new_stop.pos = (grad->stops[grad->stops_count-2].pos + grad->stops[grad->stops_count-1].pos) * 0.5f;
+				new_stop.color = interpolate(stops, grad->stops_count, new_stop.pos);
 			}
 		} else {
 			// From mouse click
-			new_stop.t = command.t;
-			new_stop.color = interpolate(stops, grad->stops_count, new_stop.t);
+			new_stop.pos = command.pos;
+			new_stop.color = interpolate(stops, grad->stops_count, new_stop.pos);
 		}
 		if (is_derived)
 			new_stop.is_inserted = true;
