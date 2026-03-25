@@ -34,14 +34,16 @@ An example of value drift is that if base data has property A that is set to 2, 
 
 ## The Override flag
 
+![Shape UI](images/shape.png)
+
 The override flag works simply by having a bit of extra information in the derived data whether a property is overridden or not. At it simplest it could look something like this:
 
 ```C
 struct {
-	shape_type_t type;
+	shape_type_t shape;
 	float size;
 	// Meta
-	bool override_type;
+	bool override_shape;
 	bool override_size;
 } collision_shape_t;
 ```
@@ -65,8 +67,8 @@ To update the data from base to derived, we can simply do this:
 ```C
 void update_inherited_data(const collision_shape_t* base, collision_shape_t* derived)
 {
-	if (!derived->override_type)
-		derived->type = base->type;
+	if (!derived->override_shape)
+		derived->shape = base->shape;
 	if (!derived->override_size)
 		derived->size = base->size;
 }
@@ -75,6 +77,8 @@ void update_inherited_data(const collision_shape_t* base, collision_shape_t* der
 That is, we simply just copy over that data that is not overridden.
 
 ### Enums Bitflags
+
+![Enum UI](images/enum.png)
 
 We need to pay some extra attention when dealing with enum bitflags. One way to loo at the bit flags is to treat them as a set of boolean. That is, the bit name is kind of the variable name. This also implies that we need an override flag per enum bit. 
 
@@ -154,6 +158,8 @@ If the IDs of the items stored in the array need to be globally unique, the Arra
 
 ## Set
 
+![Tag Collection UI](images/tag_collection.png)
+
 Set is a collection of items where each item exists inly once. This makes it really easy to relate the data between base and derived containers.
 
 The most common use for set is gameplay tag collection, aka user-define-mega-enum. As already hinted, sets with finite amount of items can be thought as an extension of enum. 
@@ -213,6 +219,8 @@ The above merge routine does not keep try the tags in any specific order. For UI
 
 
 ## Sorted Array
+
+![Gradient UI](images/gradient.png)
 
 In order to be able to relate data between base and derived, we need something to identify the items uniquely for scross referencing. For the set, the items that we stored in the array were also the unique identifiers. But if we want to store arbitrary data, then we need to resort to additional unique identifier per item. Every time a new item is added to the array, it will be assigned a new unique ID.
 
@@ -322,43 +330,43 @@ Unordered array can be implemented just like the sorted array, but just don't so
 
 ## Ordered Array
 
+![TODOs UI](images/todos.png)
+
 The basic idea of unique IDs, per item override flag, and discard list also applies to ordered arrays. The additional detail we need to handle is that output of the update inherited data function will need to maintain the order of the items.
 
 There is no perfect solution to this, as the array simply does not capture enough intent from the user. As simple example, if you add new item to the array at the same location both in base and derived, which one should come first? Or if you added 3 items, should the new items interleaved, or should we merge them as clusters in the order they were added in base or derived? Since it is messy, let's put down some things we wish from the ordered merge:
 
 - *Maintain order*:
 	- we assume that modifications in the derived data are in the order the user intended
-- **Maintain clusters:
+- *Maintain clusters*:
 	- we assume that items that were modified together should stay together
-- Handle common operations predictably:
+- *Handle common operations predictably*:
 	- items added to to the end of the derived array should be kept there
 	- items added to to the beginning of the derived array should kept there
 	- items added to the middle of the base array should appear in their relative position in the derived
 
 
-The data we want to merge looks very similar to the one we have in the gradient case:
-
-The data for this example is a mapping of buttons to actions: 
+The data for this example is a to do list: 
 
 ```C
-typedef struct action {
-	button_code_t button;
-	action_type_t action;
+typedef struct {
+	bool done;
+	char name[MAX_TASK_NAME];
 	// Meta
 	uid_t id;
 	bool is_inserted;
 	bool override_array_index;
-	bool override_button;
-	bool override_action;
-} action_t;
+	bool override_done;
+	bool override_name;
+} task_t;
 
-typedef struct action_map {
-	action_t actions[MAX_ACTIONS];
-	int32_t actions_count;
+typedef struct {
+	task_t tasks[MAX_TASKS];
+	int32_t tasks_count;
 	// Meta
-	uid_t discarded[MAX_ACTIONS];
+	uid_t discarded[MAX_TASKS];
 	int32_t discarded_count;
-} action_map_t;
+} todo_list_t;
 ```
 
 The `is_inserted` per action works the same as before, so does the property overrides, there is new override `override_array_index` which indicates that we have modified the (implicit) ordering and we want to keep the item similarly positioned as it currently is in the derived array. The container is build simiarly as before, we have list of items, and discarded list.
@@ -387,30 +395,30 @@ We will make a merge array for both the *base* and *derived* data. The `id` is t
 We convert from our list of structs to the merge arrays like this:
 
 ```C
-void actions_update_inherited_data(const action_map_t* base_actions, action_map_t* derived_actions)
+void todos_update_inherited_data(const todo_list_t* base_todos, todo_list_t* derived_todos)
 {
 	merge_array_t base = {0};
 	merge_array_t derived = {0};
 
-	for (int32_t i = 0; i < base_actions->actions_count; i++) {
+	for (int32_t i = 0; i < base_todos->tasks_count; i++) {
 		merge_array_add(&base, (merge_item_t){
-			.id = base_actions->actions[i].id,
+			.id = base_todos->tasks[i].id,
 			.base_idx = i,
 			.derived_idx = INVALID_INDEX,
 		});
 	}
 
-	for (int32_t i = 0; i < derived_actions->actions_count; i++) {
-		const bool is_inserted = derived_actions->actions[i].is_inserted;
+	for (int32_t i = 0; i < derived_todos->tasks_count; i++) {
+		const bool is_override = task_is_override(&derived_todos->tasks[i]);
 		merge_array_add(&derived, (merge_item_t){
-			.id = is_inserted ? INVALID_ID : derived_actions->actions[i].id,
+			.id = is_override ? INVALID_ID : derived_todos->tasks[i].id,
 			.base_idx = INVALID_INDEX,
 			.derived_idx = i,
-			.is_pinned = is_inserted || derived_actions->actions[i].override_array_index,
+			.is_pinned = is_override || derived_todos->tasks[i].override_array_index,
 		});
 	}
-	for (int32_t i = 0; i < derived_actions->discarded_count; i++)
-		merge_array_add_discarded(&derived, derived_actions->discarded[i]);
+	for (int32_t i = 0; i < derived_todos->discarded_count; i++)
+		merge_array_add_discarded(&derived, derived_todos->discarded[i]);
 
 	...
 ```
@@ -432,13 +440,13 @@ The merge magic will update the changes from `base` to the `derived` merge array
 	merge_array_reconcile(&base, &derived);
 
 	// Copy back adjusted removed items.
-	derived_actions->discarded_count = derived.discarded_count;
+	derived_todos->discarded_count = derived.discarded_count;
 	for (int32_t i = 0; i < derived.discarded_count; i++)
-		derived_actions->discarded[i] = derived.discarded[i];
+		derived_todos->discarded[i] = derived.discarded[i];
 
 	// Combine results and inherit properties.
-	action_t result_actions[MAX_ACTIONS];
-	int32_t result_actions_count = 0;
+	task_t results[MAX_TASKS];
+	int32_t result_tasks_count = 0;
 
 	for (int32_t i = 0; i < derived.items_count; i++) {
 		const int32_t base_idx = derived.items[i].base_idx;
@@ -446,35 +454,33 @@ The merge magic will update the changes from `base` to the `derived` merge array
 		if (derived_idx == INVALID_INDEX) {
 			// The item does not exist in derived, create new derived item.
 			assert(base_idx != INVALID_INDEX);
-			const action_t* base_action = &base_actions->actions[base_idx];
-			action_t new_action = {
-				.button = base_action->button,
-				.action = base_action->action,
+			const task_t* base_action = &base_todos->tasks[base_idx];
+			task_t new_action = {
+				.done = base_action->done,
 				.id = base_action->id,
 			};
-			assert(result_actions_count < MAX_ACTIONS);
-			result_actions[result_actions_count++] = new_action;
+			strcpy(new_action.name, base_action->name);
+			results[result_tasks_count++] = new_action;
 		} else {
-			// Copy itemfrom original array.
+			// Copy item from original array.
 			assert(derived_idx != INVALID_INDEX);
-			action_t existing_action = derived_actions->actions[derived_idx];
+			task_t existing_item = derived_todos->tasks[derived_idx];
 			// Inherit data
-			if (base_idx != INVALID_INDEX && !existing_action.is_inserted) {
-				const action_t* base_action = &base_actions->actions[base_idx];
-				if (!existing_action.override_button)
-					existing_action.button = base_action->button;
-				if (!existing_action.override_action)
-					existing_action.action = base_action->action;
+			if (base_idx != INVALID_INDEX && !existing_item.is_inserted) {
+				const task_t* base_action = &base_todos->tasks[base_idx];
+				if (!existing_item.override_done)
+					existing_item.done = base_action->done;
+				if (!existing_item.override_name)
+					strcpy(existing_item.name, base_action->name);
 			}
-			assert(result_actions_count < MAX_ACTIONS);
-			result_actions[result_actions_count++] = existing_action;
+			results[result_tasks_count++] = existing_item;
 		}
 	}
 
 	// Copy results back to derived.
-	derived_actions->actions_count = result_actions_count;
-	for (int32_t i = 0; i < result_actions_count; i++)
-		derived_actions->actions[i] = result_actions[i];
+	derived_todos->tasks_count = result_tasks_count;
+	for (int32_t i = 0; i < result_tasks_count; i++)
+		derived_todos->tasks[i] = results[i];
 }
 ```
 
@@ -591,6 +597,8 @@ Longest edit subsequence or longest increasing subsequence could be used to impr
 
 ## Ordered Map
 
+![Actions UI](images/actions.png)
+
 Maps and Set both are _exceptionally_ hard to handle in the user interface, even without any data inheritance.
 
 For example, we might have a mapping from button codes to actions, say we start with this map:
@@ -605,9 +613,11 @@ One option to implement maps is to just treat them as ordered arrays, then add v
 
 ## Array of Objects
 
-So far we have deal with items which are locally identified per container. The ids have influence only across the chain of derived assets.
+![Nodes UI](images/nodes.png)
 
-There are cases where the ID uniquely represent an object in the whole system or within an asset. In such cases we need to store extra data to match the ids between the base data an derived data, we call this addition reference `base_id`.
+So far we have dealt with items with IDs which are locally identified per container. The IDs have influence only across the chain of derived assets.
+
+There are cases where the ID assgined to an item represent an object in the whole system or within an asset. In such cases we need to store extra data to match the IDs to their couter part in base data, we call this addition reference `base_id`.
 
 ![Inheritance](images/inheritance.svg)
 
@@ -633,7 +643,6 @@ typedef struct node_ref_array {
 	int32_t discarded_count;
 } node_ref_array_t;
 ```
-
 
 For merging object arrays, we are going to use the same merge array as before:
 
@@ -666,7 +675,66 @@ void nodes_update_inherited_data(const node_ref_array_t* base_nodes, node_ref_ar
 	...
 ```
 
-The object ids in the base and derived do not match, but we can use the `id` from the base array, `base_id` from the derived array to match the items to merge. Note, how we only set the id for nodes that are _not_ created in the derived data, even if they might have calid `base_id`. This allows a new item inserted in the derived array to inherit from any object in the base.
+The object ids in the base and derived do not match, but we can use the `id` from the base array, `base_id` from the derived array to match the items to merge. Note, how we only set the id for nodes that are _not_ created in the derived data, even if they might have valid `base_id`. This allows a new item inserted in the derived array to inherit from any object in the base.
+
+```C
+	...
+
+	merge_array_reconcile(&base, &derived);
+
+	// Copy adjusted removed items.
+	derived_nodes->discarded_count = derived.discarded_count;
+	for (int32_t i = 0; i < derived.discarded_count; i++)
+		derived_nodes->discarded[i] = derived.discarded[i];
+
+	// Combine results and inherit properties.
+	node_ref_t result_nodes[MAX_NODES];
+	int32_t result_nodes_count = 0;
+
+	for (int32_t i = 0; i < derived.items_count; i++) {
+		const int32_t base_idx = derived.items[i].base_idx;
+		const int32_t derived_idx = derived.items[i].derived_idx;
+		if (derived_idx == INVALID_INDEX) {
+			// The item does not exist in derived, create new derived node.
+			assert(base_idx != INVALID_INDEX);
+			const node_ref_t* base_node = &base_nodes->nodes[base_idx];
+
+			node_ref_t new_node = {
+				.id = gen_id(),
+				.base_id = base_node->id,
+				.is_visible = base_node->is_visible,
+			};
+			memcpy(new_node.name, base_node->name, sizeof(new_node.name));
+
+			result_nodes[result_nodes_count++] = new_node;
+		} else {
+			// Copy node from original array.
+			assert(derived_idx != INVALID_INDEX);
+			node_ref_t existing_node = derived_nodes->nodes[derived_idx];
+			// Inherit data
+			const int32_t base_node_idx = nodes_index_of(base_nodes, existing_node.base_id);
+			if (base_node_idx != INVALID_INDEX) {
+				const node_ref_t* base_node = &base_nodes->nodes[base_node_idx];
+				if (!existing_node.override_is_visible)
+					existing_node.is_visible = base_node->is_visible;
+			} else {
+				// Clear out base node reference if it is not valid anymore.
+				existing_node.base_id = INVALID_ID;
+			}
+
+			result_nodes[result_nodes_count++] = existing_node;
+		}
+	}
+
+	// Copy results back to derived.
+	derived_nodes->nodes_count = result_nodes_count;
+	for (int32_t i = 0; i < result_nodes_count; i++)
+		derived_nodes->nodes[i] = result_nodes[i];
+}
+```
+
+We use the same merge as in ordered array. The handling of the inherited nodes is a bit different since we now handle both inherited nodes and derived nodes (the nested prefab thing).
+
 
 ## The UI
 
@@ -674,9 +742,13 @@ The object ids in the base and derived do not match, but we can use the `id` fro
 
 The challenge for the override visualization is that it needs to work with many different types of widgets and contexts. A fairly common way to represent a overridden property is drawing a colored (usually blue) vertical line at the begining of the changed line. It is not too distracting, yet quick to recognize at glance. The simple shape is quite easy to slap next to just about any widget.
 
-We should also have a way to indicate that there are overrides within a data container (object, array, etc). This allows to quickly see where the overriden data is even if the actual data is outside the view or inside collapsed UI.
+We should also have a way to indicate that there are overrides within a data container (object, array, etc). This allows to quickly see where the overriden data is even if the actual data is outside the view or inside collapsed UI. In the prototype I'm using the same indicator, but dimmer.
 
 The override indicator also should be granular enough that if you have laid out multiple widgets on the same row, each of them can be highlighted out separately.
+
+One property that is invisble is the array item order. I tested with various ways to visualize that, but they all felt really heavy. In the end I settled on just showing that "something has changed on thos row". I feel like some indicator would be in order.
+
+![Gradient UI](images/gradient.png)
 
 One challange I faced in this prototype was how to apply the indicator to markers, like keyframes. Many options I tried felt too much like the marker was selected. I eventually settled in a horizontal line over the marker, as it did not look like anything that felt like it had meaning on the timeline.
 
@@ -684,7 +756,9 @@ In addition to the indicator we also need a way to revert the changes. For widge
 
 Removed items need extra care, since they are not represented in the UI. I chose to include simple red indicator next to the item count to signal that items have been removed from the container. The indicator also has quick preview of the items as tooltip.
 
-The revert button on the container header allows all the changes to be reverted, or more granular way to revert the removed items.
+The revert button on the container header allows all the changes to be reverted, or more granular way to revert the removed items. Laying multiple items on the same line also creates issue for the revert UI. In this prototype I chose to summon a menu, which allows the whole row to be reverted or individual items. 
+
+I dont like how in this prototype the revert is different for the single property vs multi property case. Maybe the revert could always be full row, and you would use right click to summon the more details options.
 
 The revert UI can get as complex as the rest of the UI. We are essentially building a tool that handles the invisible connections between two documents.
 

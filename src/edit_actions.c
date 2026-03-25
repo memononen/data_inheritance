@@ -190,7 +190,6 @@ void actions_update_inherited_data(const action_map_t* base_actions, action_map_
 			.base_idx = INVALID_INDEX,
 			.derived_idx = i,
 			.is_pinned = action_is_override(&derived_actions->actions[i])
-//				|| derived_actions->actions[i].has_id_conflict
 				|| derived_actions->actions[i].override_array_index,
 		});
 	}
