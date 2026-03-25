@@ -318,7 +318,7 @@ bool edit_todos(todo_list_t* todos, const todo_list_t* base_todos)
 
 			ImGui_PushIDInt(i);
 
-			ImGui_PushStyleVarX(ImGuiStyleVar_ItemSpacing, 0);
+			ImGui_PushStyleVarImVec2(ImGuiStyleVar_ItemSpacing, (ImVec2){0,0});
 			ImGui_PushStyleVarImVec2(ImGuiStyleVar_FramePadding, (ImVec2){0,0});
 			ImGui_SelectableEx("##row", false, ImGuiSelectableFlags_AllowOverlap, (ImVec2){0, row_h});
 			ImRect item_rect = ImGui_GetItemContentRect();
@@ -365,30 +365,43 @@ bool edit_todos(todo_list_t* todos, const todo_list_t* base_todos)
 
 			ImGui_OpenPopupOnItemClick("node_context_menu", 0);
 
-			const bool item_is_overridden = task_is_override(item);
+			const bool item_is_override = task_is_override(item);
 			const bool item_has_overrides = task_has_overrides(item);
 
 			// Override marker for the whole row
-			if (is_derived) {
-				ImGui_PackNextSlotEx(measure_override_marker(), ImGuiPack_Start, ImGuiAlign_Center, get_override_marker_space());
-				override_marker(item_is_overridden, item_has_overrides);
-
-				if (ImGui_BeginItemTooltip()) {
-					if (item_is_overridden)
-						ImGui_TextUnformatted("Action has been inserted, and does not exists in Base.");
-					else if (item_has_overrides)
-						ImGui_TextUnformatted("Action has modifications compared to Base.");
-					ImGui_EndTooltip();
-				}
-			}
+			if (is_derived)
+				override_marker_overlay(item_rect, item_is_override, item_has_overrides);
 
 			// Revert button
 			if (is_derived) {
 				ImGui_PackNextSlotEx(ImGui_MeasureIconButton(), ImGuiPack_End, ImGuiAlign_Center, 0.f);
-				if (ImGui_IconButtonColoredEx(ICON_ARROW_BACK, IM_COL32(255, 255, 255, 128), item_has_overrides || item_is_overridden)) {
-					command = command_make_revert_at(i);
+				if (ImGui_IconButtonColoredEx(ICON_ARROW_BACK, IM_COL32(255, 255, 255, 128), item_has_overrides || item_is_override)) {
+					if (ImGui_GetIO()->KeyCtrl)
+						command = command_make_revert_at(i);
+					else
+						ImGui_OpenPopup("revert_menu", 0);
 				}
 				ImGui_SetItemTooltip("Revert changes.");
+
+				if (ImGui_BeginPopup("revert_menu", 0)) {
+
+					if (ImGui_MenuItemWithIconEx("Revert All", ICON_ARROW_BACK, NULL, false, item_has_overrides || item_is_override)) {
+						command = command_make_revert_at(i);
+					}
+					if (ImGui_MenuItemWithIconEx("Revert reorder", ICON_REORDER, NULL, false, item->override_array_index)) {
+						item->override_array_index = false;
+						changed = true;
+					}
+					if (ImGui_MenuItemWithIconEx("Revert property Done", ICON_EDIT, NULL, false, item->override_done)) {
+						item->override_done = false;
+						changed = true;
+					}
+					if (ImGui_MenuItemWithIconEx("Revert property Name", ICON_EDIT, NULL, false, item->override_name)) {
+						item->override_name = false;
+						changed = true;
+					}
+					ImGui_EndPopup();
+				}
 			}
 
 			// Remove button
@@ -396,24 +409,19 @@ bool edit_todos(todo_list_t* todos, const todo_list_t* base_todos)
 			if (ImGui_IconButtonColored(ICON_X, IM_COL32(255, 255, 255, 128))) {
 				command = command_make_remove_at(i);
 			}
-			ImGui_SetItemTooltip("Remove action.");
+			ImGui_SetItemTooltip("Remove task.");
 
 			// Context menu
+			bool request_rename = false;
 			if (ImGui_BeginPopup("node_context_menu", 0)) {
-				if (ImGui_MenuItem(ICON_PLUS " Add")) {
+				if (ImGui_MenuItem(ICON_PLUS " Add new task")) {
 					command = command_make_insert_at(i+1);
 				}
-				if (is_derived) {
-					ImGui_BeginDisabled(!item->override_array_index);
-					if (ImGui_MenuItem(ICON_ARROW_BACK " Revert Reoder")) {
-						item->override_array_index = false;
-						changed = true;
-					}
-					ImGui_EndDisabled();
-				}
-
-				if (ImGui_MenuItem(ICON_X " Delete")) {
+				if (ImGui_MenuItem(ICON_X " Delete task")) {
 					command = command_make_remove_at(i);
+				}
+				if (ImGui_MenuItem(ICON_EDIT " Edit task name")) {
+					request_rename = true;
 				}
 				ImGui_EndPopup();
 			}
@@ -422,13 +430,8 @@ bool edit_todos(todo_list_t* todos, const todo_list_t* base_todos)
 			// Grab handle
 			ImGui_PackNextSlot(ImGui_MeasureIcon(), ImGuiPack_Start, ImGuiAlign_Center);
 			ImGui_AlignTextToFramePadding();
-			if (item->override_array_index) {
-				ImGui_IconColored(ICON_REORDER, IM_COL32(255,255,255,128));
-				ImGui_SetItemTooltip("Drag to move. The item has been reodered.");
-			} else {
-				ImGui_IconColored(ICON_GRIP_HORIZONTAL, IM_COL32(255,255,255,128));
-				ImGui_SetItemTooltip("Drag to move.");
-			}
+			ImGui_IconColored(ICON_GRIP_HORIZONTAL, IM_COL32(255,255,255,128));
+			ImGui_SetItemTooltip("Drag to move.");
 
 			// Done property
 			ImGui_PackNextSlot(ImGui_MeasureFrame(1.f), ImGuiPack_Start, ImGuiAlign_Center);
@@ -437,45 +440,39 @@ bool edit_todos(todo_list_t* todos, const todo_list_t* base_todos)
 					item->override_done = true;
 				changed = true;
 			}
-			if (is_derived) {
-				if (item_override_marker(item->override_done)) {
-					item->override_done = false;
-					changed = true;
-				}
-			}
+			ImGui_SetItemTooltip("Done");
+			if (is_derived)
+				override_marker_overlay(ImGui_GetItemRect(),  item->override_done, false);
 
 			// Name property
 			ImRect name_rect = ImGui_PackNextSlotPct(1.0f, ImGui_GetFrameHeight(), ImGuiPack_Start, ImGuiAlign_Center);
-			ImGui_AlignTextToFramePadding();
 
-			ImGui_TextUnformatted(item->name);
-			ImGui_SetItemTooltip("Task name, double click to edit.");
-
-			if (is_row_hovered && ImGui_IsMouseDoubleClicked(0)) {
-				ImGui_OpenPopup("rename_popup", 0);
-			}
-
-			// Would like to use ImGui_TempInputText() but it assets, popup window to save the day!
-			ImGui_PushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0,0});
-			ImGui_SetNextWindowPos(name_rect.Min, ImGuiCond_Appearing);
-			if (ImGui_BeginPopup("rename_popup", 0)) {
-				ImGui_SetKeyboardFocusHere();
-				if (ImGui_InputText("##name", item->name, IM_COUNTOF(item->name), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
+			ImGuiID id = ImGui_GetID("##name");
+			bool temp_input_is_active = ImGui_TempInputIsActive(id);
+			bool temp_input_start = is_row_hovered ? ImGui_IsMouseDoubleClicked(0) : false;
+			bool temp_input_start_by_enter_pressed = ImGui_IsItemFocused() && (ImGui_IsKeyPressed(ImGuiKey_Enter) || ImGui_IsKeyPressed(ImGuiKey_KeypadEnter));
+			if (request_rename || temp_input_is_active || temp_input_start || temp_input_start_by_enter_pressed) {
+				if (!temp_input_is_active) {
+					ImGuiContext* g = ImGui_GetCurrentContext();
+					g->NavActivateId = id;
+					g->NavActivateFlags = ImGuiActivateFlags_PreferInput;
+				}
+				if (ImGui_TempInputText(name_rect, id, "##name", item->name, IM_COUNTOF(item->name), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
 					if (is_derived && !item->is_inserted)
 						item->override_name = true;
 					changed = true;
-					ImGui_CloseCurrentPopup();
 				}
-				ImGui_EndPopup();
+				ImGui_KeepAliveID(id);
 			}
-			ImGui_PopStyleVar();
-
-			if (is_derived) {
-				if (override_marker_box(name_rect, item->override_name)) {
-					item->override_name = false;
-					changed = true;
-				}
+			else
+			{
+				ImDrawList* draw_list = ImGui_GetWindowDrawList();
+				ImVec2 padding = ImGui_GetStyle()->FramePadding;
+				ImVec2 pos = { name_rect.Min.x + padding.x, name_rect.Min.y + padding.y };
+				ImDrawList_AddText(draw_list, pos, ImGui_GetColorU32(ImGuiCol_Text), item->name);
 			}
+			if (is_derived)
+				override_marker_overlay(name_rect, item->override_name, false);
 
 			ImGui_EndPack();
 			ImGui_PopID();

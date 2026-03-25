@@ -5,23 +5,27 @@
 #include "dcimgui.h"
 #include "dcimgui_internal.h"
 
-// pyftsubset tabler-icons.ttf --unicodes=U+eb55,U+eb0b,U+ea0c,U+f698,U+ea45,U+ea5e,U+ec00,U+ea9a,U+f7ec,U+efa5,U+f0d6,U+fdae,U+f0d8,U+fc15,U+ea94,U+f6f0 --output-file=tabler-icons-subset.ttf
+/*
+pyftsubset tabler-icons.ttf --unicodes=U+eb55,U+eb0b,U+ea0c,U+f698,U+ea45,U+ea5e,U+ec00,U+ea9a,U+f7ec,U+fdae,U+f0d8,U+fc15,U+ea94,U+f6f0,U+eb0c,U+ea98,U+f576,U+fa96 --output-file=tabler-icons-subset.ttf
+*/
 #define ICON_PLUS  "\xee\xac\x8b"   // U+EB0B
 #define ICON_X  "\xee\xad\x95"   // U+EB55
 #define ICON_ARROW_BACK  "\xee\xa8\x8c"   // U+EA0C
+#define ICON_POINT  "\xee\xac\x8c"   // U+EB0C
 #define ICON_POINT_FILLED  "\xef\x9a\x98"   // U+F698
 #define ICON_BOX  "\xee\xa9\x85"   // U+EA45
+#define ICON_CUBE_PLUS  "\xef\xaa\x96"   // U+FA96
 #define ICON_CHECK  "\xee\xa9\x9e"   // U+EA5E
 #define ICON_GRIP_HORIZONTAL  "\xee\xb0\x80"   // U+EC00
 #define ICON_EYE  "\xee\xaa\x9a"   // U+EA9A
 #define ICON_EYE_CLOSED  "\xef\x9f\xac"   // U+F7EC
-#define ICON_COMPONENTS  "\xee\xbe\xa5"   // U+EFA5
-#define ICON_COMPONENTS_OFF  "\xef\x83\x96"   // U+F0D6
 #define ICON_COPY_OFF  "\xef\x83\x98"   // U+F0D8
 #define ICON_COPY_PLUS  "\xef\xb6\xae"   // U+FDAE
 #define ICON_DOTS_VERTICAL  "\xee\xaa\x94"   // U+EA94
 #define ICON_REORDER  "\xef\xb0\x95"   // U+FC15
 #define ICON_ALERT_TRIANGLE_FILLED  "\xef\x9b\xb0"   // U+F6F0
+#define ICON_EDIT  "\xee\xaa\x98"   // U+EA98
+#define ICON_KEYFRAME  "\xef\x95\xb6"   // U+F576
 
 #define ARRAY_HEADER_BG_COLOR			IM_COL32(255, 255, 255, 32)
 #define ARRAY_HEADER_BG_COLOR_ACTIVE	IM_COL32(255, 255, 255, 64)
@@ -29,7 +33,6 @@
 #define OVERRIDE_COLOR				IM_COL32(68, 164, 248, 255)
 #define OVERRIDE_COLOR_DIM			IM_COL32(68, 164, 248, 128)
 #define OVERRIDE_COLOR_REMOVE		IM_COL32(224, 87, 87, 255)
-
 
 float get_override_marker_width(void);
 float get_override_marker_space(void);
@@ -127,10 +130,8 @@ static inline float calc_color_value(ImU32 color)
 	return c.x * 0.2126f + c.y * 0.7152f + c.z * 0.0722f;
 }
 
-ImVec2 measure_override_marker(void);
-void override_marker(bool is_overridden, bool has_overrides);
-bool item_override_marker(bool is_override);
-bool override_marker_box(ImRect rect, bool is_override);
+
+void override_marker_overlay(ImRect rect, bool is_override, bool has_overrides);
 
 enum {
 	ARRAY_HEADER_IS_MODIFIED = 1<<0,

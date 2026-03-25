@@ -213,10 +213,8 @@ bool tag_picker(tag_container_t* tags, const tag_desc_t* tag_descs, int32_t tag_
 
 			ImGui_BeginPack(ImGui_GetItemContentRect());
 
-			if (is_derived) {
-				ImGui_PackNextSlotEx(measure_override_marker(), ImGuiPack_Start, ImGuiAlign_Center, get_override_marker_space());
-				override_marker( is_override, false);
-			}
+			// Add a bit extra space for the override marker.
+			ImGui_PackAdvance(ImGuiPack_Start, get_override_marker_width());
 
 			ImGui_PushStyleColor(ImGuiCol_FrameBg, desc->color);
 			ImGui_PushStyleColor(ImGuiCol_FrameBgActive, desc->color);
@@ -229,6 +227,10 @@ bool tag_picker(tag_container_t* tags, const tag_desc_t* tag_descs, int32_t tag_
 				item_toggled = true;
 
 			ImGui_PopStyleColorEx(4);
+
+			// Override marker
+			if (is_derived)
+				override_marker_overlay(ImGui_GetItemRect(), is_override, false);
 
 			ImGui_PackNextSlot(ImGui_MeasureTextUnformatted(desc->name), ImGuiPack_Start, ImGuiAlign_Center);
 			ImGui_AlignTextToFramePadding();
@@ -300,10 +302,11 @@ tag_chip_result_t tag_chip(const char* label, ImU32 tag_color, uint32_t flags)
 	if (flags & TAG_CHIP_WRAP_LINE)
 		ImGui_SamelineWrapped(button_size.x);
 
+	const float rounding = style->FrameRounding;
+
 	// Label
 	result.tag_clicked = ImGui_InvisibleButton("tag", button_size, ImGuiButtonFlags_MouseButtonLeft | (unsigned)ImGuiButtonFlags_AllowOverlap);
-	ImVec2 tag_bmin = ImGui_GetItemRectMin();
-	ImVec2 tag_bmax = ImGui_GetItemRectMax();
+	ImRect tag_rect = { .Min = ImGui_GetItemRectMin(), .Max = ImGui_GetItemRectMax() };
 	bool tag_hovered = ImGui_IsItemHovered(0);
 	bool tag_active = ImGui_IsItemActive();
 
@@ -319,12 +322,10 @@ tag_chip_result_t tag_chip(const char* label, ImU32 tag_color, uint32_t flags)
 		}
 	}
 
-
-	ImVec2 remove_button_pos = { .x = tag_bmax.x - remove_button_width, .y = tag_bmin.y };
-	ImVec2 remove_button_size = { .x = remove_button_width, .y = tag_bmax.y - tag_bmin.y };
+	ImVec2 remove_button_pos = { .x = tag_rect.Max.x - remove_button_width, .y = tag_rect.Min.y };
+	ImVec2 remove_button_size = { .x = remove_button_width, .y = tag_rect.Max.y - tag_rect.Min.y };
 
 	// Remove button
-	bool remove_clicked = false;
 	bool remove_hovered = false;
 	bool remove_active = false;
 
@@ -340,31 +341,26 @@ tag_chip_result_t tag_chip(const char* label, ImU32 tag_color, uint32_t flags)
 	bool tag_color_is_dark = calc_color_value(tag_color) < 0.7f;
 	ImU32 label_color = tag_color_is_dark ? IM_COL32(255,255,255,255) : IM_COL32(0,0,0,255);
 
-	if (flags & TAG_CHIP_IS_OVERRIDE) {
-		ImVec2 marker_bmin = tag_bmin;
-		ImVec2 marker_bmax = { marker_bmin.x + get_override_marker_width(), tag_bmax.y };
-
-		ImDrawList_AddRectFilled(draw_list, marker_bmin, marker_bmax, OVERRIDE_COLOR);
-		tag_bmin.x += get_override_marker_width() + get_override_marker_space();
-	}
+	// Override marker.
+	override_marker_overlay(tag_rect, flags & TAG_CHIP_IS_OVERRIDE, false);
 
 	// Tag Body
 	tag_color = ImGui_GetColorU32ImU32Ex(tag_color, (flags & TAG_CHIP_ALLOW_CLICK) && (tag_active | tag_hovered) ? 1.f : 0.85f);
-	ImDrawList_AddRectFilled(draw_list, tag_bmin, tag_bmax, tag_color);
+	ImDrawList_AddRectFilledEx(draw_list, tag_rect.Min, tag_rect.Max, tag_color, rounding, ImDrawFlags_RoundCornersAll);
 
 	// Remove button hover
 	if (remove_hovered || remove_active) {
 		ImVec2 remove_bmin = { remove_button_pos.x, remove_button_pos.y };
 		ImVec2 remove_bmax = { remove_button_pos.x + remove_button_size.x, remove_button_pos.y + remove_button_size.y };
 		ImU32 remove_color = ImGui_GetColorU32ImU32Ex(label_color, remove_active ? 0.5f : 0.25f);
-		ImDrawList_AddRectFilled(draw_list, remove_bmin, remove_bmax, remove_color);
+		ImDrawList_AddRectFilledEx(draw_list, remove_bmin, remove_bmax, remove_color, rounding, ImDrawFlags_RoundCornersRight);
 	}
 
 	// Label
 	label_color = ImGui_GetColorU32ImU32Ex(label_color, tag_active ? 1.0f : 0.85f);
 	ImVec2 label_pos = {
-		IM_ROUND(tag_bmin.x + style->FramePadding.x),
-		IM_ROUND(tag_bmin.y + (tag_bmax.y - tag_bmin.y) * 0.5f - label_size.y * 0.5f),
+		IM_ROUND(tag_rect.Min.x + style->FramePadding.x),
+		IM_ROUND(tag_rect.Min.y + (tag_rect.Max.y - tag_rect.Min.y) * 0.5f - label_size.y * 0.5f),
 	};
 	ImDrawList_AddText(draw_list, label_pos, label_color, label);
 

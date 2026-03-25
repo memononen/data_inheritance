@@ -348,7 +348,7 @@ bool edit_actions(action_map_t* actions, const action_map_t* base_actions)
 
 			ImGui_PushIDInt(i);
 
-			ImGui_PushStyleVarX(ImGuiStyleVar_ItemSpacing, 0);
+			ImGui_PushStyleVarImVec2(ImGuiStyleVar_ItemSpacing, (ImVec2){0,0});
 			ImGui_PushStyleVarImVec2(ImGuiStyleVar_FramePadding, (ImVec2){0,0});
 			ImGui_SelectableEx("", false, ImGuiSelectableFlags_AllowOverlap, (ImVec2){0, row_h});
 			ImRect item_rect = ImGui_GetItemContentRect();
@@ -394,30 +394,43 @@ bool edit_actions(action_map_t* actions, const action_map_t* base_actions)
 
 			ImGui_OpenPopupOnItemClick("node_context_menu", 0);
 
-			const bool item_is_overridden = action_is_override(item);
+			const bool item_is_override = action_is_override(item);
 			const bool item_has_overrides = action_has_overrides(item);
 
 			// Override marker for the whole row
-			if (is_derived) {
-				ImGui_PackNextSlotEx(measure_override_marker(), ImGuiPack_Start, ImGuiAlign_Center, get_override_marker_space());
-				override_marker(item_is_overridden, item_has_overrides);
-
-				if (ImGui_BeginItemTooltip()) {
-					if (item_is_overridden)
-						ImGui_TextUnformatted("Action has been inserted, and does not exists in Base.");
-					else if (item_has_overrides)
-						ImGui_TextUnformatted("Action has modifications compared to Base.");
-					ImGui_EndTooltip();
-				}
-			}
+			if (is_derived)
+				override_marker_overlay(item_rect, item_is_override, item_has_overrides);
 
 			// Revert button
 			if (is_derived) {
 				ImGui_PackNextSlotEx(ImGui_MeasureIconButton(), ImGuiPack_End, ImGuiAlign_Center, 0.f);
-				if (ImGui_IconButtonColoredEx(ICON_ARROW_BACK, IM_COL32(255, 255, 255, 128), item_has_overrides || item_is_overridden)) {
-					command = command_make_revert_at(i);
+				if (ImGui_IconButtonColoredEx(ICON_ARROW_BACK, IM_COL32(255, 255, 255, 128), item_has_overrides || item_is_override)) {
+					if (ImGui_GetIO()->KeyCtrl)
+						command = command_make_revert_at(i);
+					else
+						ImGui_OpenPopup("revert_menu", 0);
 				}
 				ImGui_SetItemTooltip("Revert changes.");
+
+				if (ImGui_BeginPopup("revert_menu", 0)) {
+
+					if (ImGui_MenuItemWithIconEx("Revert All", ICON_ARROW_BACK, NULL, false, item_has_overrides || item_is_override)) {
+						command = command_make_revert_at(i);
+					}
+					if (ImGui_MenuItemWithIconEx("Revert reorder", ICON_REORDER, NULL, false, item->override_array_index)) {
+						item->override_array_index = false;
+						changed = true;
+					}
+					if (ImGui_MenuItemWithIconEx("Revert property Button", ICON_EDIT, NULL, false, item->override_button)) {
+						item->override_button = false;
+						changed = true;
+					}
+					if (ImGui_MenuItemWithIconEx("Revert property Action", ICON_EDIT, NULL, false, item->override_action)) {
+						item->override_action = false;
+						changed = true;
+					}
+					ImGui_EndPopup();
+				}
 			}
 
 			// Remove button
@@ -433,9 +446,6 @@ bool edit_actions(action_map_t* actions, const action_map_t* base_actions)
 			if (item->has_id_conflict) {
 				ImGui_IconColored(ICON_ALERT_TRIANGLE_FILLED, IM_COL32(255,160,0,220));
 				ImGui_SetItemTooltip("Item key conflicts with another item.");
-			} else if (item->override_array_index) {
-				ImGui_IconColored(ICON_REORDER, IM_COL32(255,255,255,128));
-				ImGui_SetItemTooltip("Drag to move. The item has been reodered.");
 			} else {
 				ImGui_IconColored(ICON_GRIP_HORIZONTAL, IM_COL32(255,255,255,128));
 				ImGui_SetItemTooltip("Drag to move.");
@@ -451,12 +461,8 @@ bool edit_actions(action_map_t* actions, const action_map_t* base_actions)
 
 				changed = true;
 			}
-			if (is_derived) {
-				if (item_override_marker(item->override_button)) {
-					item->override_button = false;
-					changed = true;
-				}
-			}
+			if (is_derived)
+				override_marker_overlay(ImGui_GetItemRect(), item->override_button, false);
 
 			// Action property
 			ImGui_PackNextSlotPct(1.0f, ImGui_GetFrameHeight(), ImGuiPack_Start, ImGuiAlign_Center);
@@ -467,27 +473,21 @@ bool edit_actions(action_map_t* actions, const action_map_t* base_actions)
 					item->override_action = true;
 				changed = true;
 			}
-			if (is_derived) {
-				if (item_override_marker(item->override_action)) {
-					item->override_action = false;
-					changed = true;
-				}
-			}
+			if (is_derived)
+				override_marker_overlay(ImGui_GetItemRect(), item->override_action, false);
 
 			// Context menu
 			if (ImGui_BeginPopup("node_context_menu", 0)) {
-				if (ImGui_MenuItem(ICON_PLUS " Add")) {
+				if (ImGui_MenuItemWithIcon("Add new action", ICON_PLUS)) {
 					command = command_make_insert_at(i+1);
 				}
 				if (is_derived) {
-					ImGui_BeginDisabled(!item->override_array_index);
-					if (ImGui_MenuItem(ICON_ARROW_BACK " Revert Reoder")) {
+					if (ImGui_MenuItemWithIconEx("Revert Reoder", ICON_ARROW_BACK, NULL, false, item->override_array_index)) {
 						item->override_array_index = false;
 						changed = true;
 					}
-					ImGui_EndDisabled();
 				}
-				if (ImGui_MenuItem(ICON_X " Delete")) {
+				if (ImGui_MenuItemWithIcon("Delete", ICON_X)) {
 					command = command_make_remove_at(i);
 				}
 				ImGui_EndPopup();

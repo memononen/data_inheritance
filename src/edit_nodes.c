@@ -372,7 +372,7 @@ bool edit_nodes(node_ref_array_t* nodes, const node_ref_array_t* base_nodes)
 
 			ImGui_PushIDInt(i);
 
-			ImGui_PushStyleVarX(ImGuiStyleVar_ItemSpacing, 0);
+			ImGui_PushStyleVarImVec2(ImGuiStyleVar_ItemSpacing, (ImVec2){0,0});
 			ImGui_PushStyleVarImVec2(ImGuiStyleVar_FramePadding, (ImVec2){0,0});
 			ImGui_SelectableEx("", false, ImGuiSelectableFlags_AllowOverlap, (ImVec2){0, row_h});
 			ImRect item_rect = ImGui_GetItemContentRect();
@@ -418,14 +418,12 @@ bool edit_nodes(node_ref_array_t* nodes, const node_ref_array_t* base_nodes)
 
 			ImGui_OpenPopupOnItemClick("node_context_menu", 0);
 
-			const bool item_is_overridden = node_is_override(item);
+			const bool item_is_override = node_is_override(item);
 			const bool item_has_overrides = node_has_overrides(item);
 
-			// Modified marker
-			if (is_derived) {
-				ImGui_PackNextSlotEx(measure_override_marker(), ImGuiPack_Start, ImGuiAlign_Center, get_override_marker_space());
-				override_marker(item_is_overridden, item_has_overrides);
-			}
+			// Override marker for the whole row
+			if (is_derived)
+				override_marker_overlay(item_rect, item_is_override, item_has_overrides);
 
 			// Icon
 			ImGui_PackNextSlot(ImGui_MeasureIcon(), ImGuiPack_Start, ImGuiAlign_Center);
@@ -437,7 +435,7 @@ bool edit_nodes(node_ref_array_t* nodes, const node_ref_array_t* base_nodes)
 			ImGui_TextUnformatted(item->name);
 
 			// Inheritance
-			if (item_is_overridden && item->base_id && base_nodes) {
+			if (item_is_override && item->base_id && base_nodes) {
 				const int32_t base_idx = nodes_index_of(base_nodes, item->base_id);
 				if (base_idx != -1) {
 					const node_ref_t* base_item = &base_nodes->nodes[base_idx];
@@ -445,14 +443,6 @@ bool edit_nodes(node_ref_array_t* nodes, const node_ref_array_t* base_nodes)
 					ImGui_AlignTextToFramePadding();
 					ImGui_TextColored(ImGui_GetColorVec4U32(IM_COL32(255, 255, 255, 64)), "(%s)", base_item->name);
 				}
-			}
-
-			// Reordered icon
-			if (item->override_array_index) {
-				ImGui_SameLine();
-				ImGui_AlignTextToFramePadding();
-				ImGui_IconColored(ICON_REORDER, IM_COL32(255, 255, 255, 64));
-				ImGui_SetItemTooltip("The item has been reordered.");
 			}
 
 
@@ -470,10 +460,29 @@ bool edit_nodes(node_ref_array_t* nodes, const node_ref_array_t* base_nodes)
 			// Revert button
 			if (is_derived) {
 				ImGui_PackNextSlotEx(ImGui_MeasureIconButton(), ImGuiPack_End, ImGuiAlign_Center, 0.f);
-				if (ImGui_IconButtonColoredEx(ICON_ARROW_BACK, IM_COL32(255, 255, 255, 128), item_is_overridden || item_has_overrides)) {
-					command = command_make_revert_at(i);
+				if (ImGui_IconButtonColoredEx(ICON_ARROW_BACK, IM_COL32(255, 255, 255, 128), item_has_overrides || item_is_override)) {
+					if (ImGui_GetIO()->KeyCtrl)
+						command = command_make_revert_at(i);
+					else
+						ImGui_OpenPopup("revert_menu", 0);
 				}
 				ImGui_SetItemTooltip("Revert changes.");
+
+				if (ImGui_BeginPopup("revert_menu", 0)) {
+
+					if (ImGui_MenuItemWithIconEx("Revert All", ICON_ARROW_BACK, NULL, false, item_has_overrides || item_is_override)) {
+						command = command_make_revert_at(i);
+					}
+					if (ImGui_MenuItemWithIconEx("Revert reorder", ICON_REORDER, NULL, false, item->override_array_index)) {
+						item->override_array_index = false;
+						changed = true;
+					}
+					if (ImGui_MenuItemWithIconEx("Revert property Visible", ICON_EDIT, NULL, false, item->override_is_visible)) {
+						item->override_is_visible = false;
+						changed = true;
+					}
+					ImGui_EndPopup();
+				}
 			}
 
 			// Remove button
@@ -490,49 +499,33 @@ bool edit_nodes(node_ref_array_t* nodes, const node_ref_array_t* base_nodes)
 			strcat(str, "##vis");
 			if (ImGui_IconButtonColored(str, IM_COL32(255, 255, 255, 128))) {
 				item->is_visible = !item->is_visible;
-				if (is_derived && !item->is_inserted)
+				if (is_derived && item->base_id != 0)
 					item->override_is_visible = true;
 				changed = true;
 			}
-			if (is_derived) {
-				if (item_override_marker(item->override_is_visible)) {
-					item->override_is_visible = false;
-					changed = true;
-				}
-
-			}
+			if (is_derived)
+				override_marker_overlay(ImGui_GetItemRect(),  item->override_is_visible, false);
 
 			// Context menu
 			if (ImGui_BeginPopup("node_context_menu", 0)) {
-				if (ImGui_MenuItem(ICON_PLUS " Add Node")) {
+				if (ImGui_MenuItemWithIcon("Add Node", ICON_PLUS)) {
 					command = command_make_insert_at(i+1);
 				}
 				if (base_nodes) {
-					if (ImGui_BeginMenu(ICON_COPY_PLUS " Add Inherited"))
-					{
+					if (ImGui_BeginMenuWithIcon("Add Inherited", ICON_COPY_PLUS)) {
 						int32_t base_node_id = INVALID_ID;
 						if (edit_base_node_menu(base_nodes, &base_node_id)) {
 							command = command_make_insert_at_base_id(i+1, base_node_id);
 						}
 						ImGui_EndMenu();
 					}
-
-					ImGui_BeginDisabled(!(item->is_inserted && item->base_id != INVALID_ID));
-					if (ImGui_MenuItem(ICON_COPY_OFF " Break Inheritance")) {
+					if (ImGui_MenuItemWithIconEx("Break Inheritance", ICON_COPY_OFF, NULL, false, item->is_inserted && item->base_id != INVALID_ID)) {
 						command = command_make_break_inheritance_at(i);
 					}
-					ImGui_EndDisabled();
-
-					ImGui_BeginDisabled(!item->override_array_index);
-					if (ImGui_MenuItem(ICON_ARROW_BACK " Revert Reoder")) {
-						item->override_array_index = false;
-						changed = true;
-					}
-					ImGui_EndDisabled();
 				}
 
 
-				if (ImGui_MenuItem(ICON_X " Delete")) {
+				if (ImGui_MenuItemWithIcon("Delete", ICON_X)) {
 					command = command_make_remove_at(i);
 				}
 				ImGui_EndPopup();

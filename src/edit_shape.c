@@ -34,12 +34,6 @@ property_row_result_t edit_property_row(const char* property_name, bool is_deriv
 
 	ImGui_BeginPack(ImGui_GetRowRect(ImGui_DefaultRowHeight));
 
-	// Override marker for the whole row
-	ImGui_PackNextSlotEx(measure_override_marker(), ImGuiPack_Start, ImGuiAlign_Center, get_override_marker_space());
-	override_marker(is_derived && is_overridden, false);
-
-	ImGui_PackAdvance(ImGuiPack_Start, ImGui_GetFrameHeight()/4.f);
-
 	ImGui_PackNextSlotPct(0.3f, ImGui_GetFrameHeight(), ImGuiPack_Start, ImGuiAlign_Center);
 	ImGui_AlignTextToFramePadding();
 	ImGui_TextUnformatted(property_name);
@@ -108,6 +102,9 @@ bool edit_collosion_shape(collision_shape_t* shape, bool is_derived)
 					shape->override_shape = true;
 				changed = true;
 			}
+			if (is_derived)
+				override_marker_overlay(ImGui_GetItemRect(), shape->override_shape, false);
+
 			ImGui_PopID();
 		}
 
@@ -129,6 +126,8 @@ bool edit_collosion_shape(collision_shape_t* shape, bool is_derived)
 					shape->override_size = true;
 				changed = true;
 			}
+			if (is_derived)
+				override_marker_overlay(ImGui_GetItemRect(), shape->override_size, false);
 
 			ImGui_PopID();
 		}
@@ -175,17 +174,14 @@ bool edit_collosion_shape(collision_shape_t* shape, bool is_derived)
 
 					ImGui_BeginPack(ImGui_GetItemContentRect());
 
-					// Override marker
-					if (is_derived) {
-						ImGui_PackNextSlotEx(measure_override_marker(), ImGuiPack_Start, ImGuiAlign_Center, get_override_marker_space());
-						override_marker( is_override, false);
-					}
-
 					// Item
 					ImGui_PackNextSlot(ImGui_MeasureFrame(1.f), ImGuiPack_Start, ImGuiAlign_Center);
 					bool is_selected_dummy = is_selected;
 					if (ImGui_Checkbox("##selected", &is_selected_dummy)) // Expecting that the button will not get activated, since the selectable does not allow overlap.
 						item_toggled = true;
+
+					if (is_derived)
+						override_marker_overlay(ImGui_GetItemRect(),  is_override, false);
 
 					ImGui_PackNextSlot(ImGui_MeasureTextUnformatted(hit_flag_names[i]), ImGuiPack_Start, ImGuiAlign_Center);
 					ImGui_AlignTextToFramePadding();
@@ -212,6 +208,9 @@ bool edit_collosion_shape(collision_shape_t* shape, bool is_derived)
 				}
 				ImGui_EndCombo();
 			}
+			if (is_derived)
+				override_marker_overlay(ImGui_GetItemRect(),  shape->override_hit_flags, false);
+
 
 			ImGui_PopID();
 

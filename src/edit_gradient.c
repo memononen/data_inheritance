@@ -279,7 +279,10 @@ void gradient_update_inherited_data(const gradient_t* base_grad, gradient_t* der
 // UI
 //
 
-#define KEY_WIDTH 12
+static float get_key_width(void)
+{
+	return IM_TRUNC(ImGui_GetFrameHeight() * 0.5f);
+}
 
 typedef struct {
 	bool remove_clicked;
@@ -289,16 +292,18 @@ typedef struct {
 edit_color_stop_key_result_t edit_color_stop_key(gradient_t* grad, int32_t idx, ImVec2 view_min, ImVec2 view_max, bool is_derived)
 {
 	edit_color_stop_key_result_t result = {0};
-
 	color_stop_t* stop = &grad->stops[idx];
 
+	ImGuiStyle* style = ImGui_GetStyle();
 	ImDrawList* draw_list = ImGui_GetWindowDrawList();
+	const float key_width = get_key_width();
+
 	const float min_x = view_min.x;
 	const float max_x = view_max.x;
-	const float x = min_x + clampf(stop->t, 0.f, 1.0) * (max_x - min_x) - KEY_WIDTH/2;
+	const float x = min_x + clampf(stop->t, 0.f, 1.0f) * (max_x - min_x) - key_width/2;
 
 	ImVec2 pos = { .x = x, .y = view_min.y };
-	ImVec2 size = { .x = KEY_WIDTH, .y = view_max.y - view_min.y };
+	ImVec2 size = { .x = key_width, .y = view_max.y - view_min.y };
 
 	ImGui_SetCursorScreenPos(pos);
 
@@ -346,18 +351,18 @@ edit_color_stop_key_result_t edit_color_stop_key(gradient_t* grad, int32_t idx, 
 	}
 
 	bool highlight = ImGui_IsItemHovered(0) || ImGui_IsItemActive();
-
 	ImVec2 center = { (bmin.x + bmax.x) / 2.f, (bmin.y + bmax.y) / 2.f };
 
-	ImDrawList_AddCircleFilled(draw_list, center, KEY_WIDTH/2+2, IM_COL32(0,0,0,128), 0);
-	ImDrawList_AddCircleFilled(draw_list, center, KEY_WIDTH/2, highlight ? IM_COL32(255,255,255,255) : IM_COL32(192,192,192,255), 0);
+	// Diamond shape
+	ImDrawList_AddCircleFilled(draw_list, center, key_width*0.5f + 3, IM_COL32(0,0,0,128), 4);
+	ImDrawList_AddCircleFilled(draw_list, center, key_width*0.5f, highlight ? IM_COL32(255,255,255,255) : IM_COL32(192,192,192,255), 4);
 
 	if (is_derived) {
 		if (stop->is_inserted || color_stop_has_overrides(stop)) {
 			ImU32 marker_color = stop->is_inserted ? OVERRIDE_COLOR : OVERRIDE_COLOR_DIM;
 			ImVec2 marker_bmin = { bmin.x, bmin.y - get_override_marker_space() - get_override_marker_width() };
 			ImVec2 marker_bmax = { bmax.x, bmin.y - get_override_marker_space() };
-			ImDrawList_AddRectFilled(draw_list, marker_bmin, marker_bmax, marker_color);
+			ImDrawList_AddRectFilledEx(draw_list, marker_bmin, marker_bmax, marker_color, style->FrameRounding, ImDrawFlags_RoundCornersTop);
 		}
 	}
 
@@ -458,15 +463,16 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 	}
 
 	// Gradient
+	const float key_width = get_key_width();
 	ImVec2 avail = ImGui_GetContentRegionAvail();
 	float row_h = ImGui_GetFrameHeight();
 	ImGui_InvisibleButton("grad", (ImVec2){avail.x, row_h + get_override_marker_width()}, ImGuiButtonFlags_MouseButtonLeft | (unsigned)ImGuiButtonFlags_AllowOverlap);
 
 	ImVec2 bmin = ImGui_GetItemRectMin();
 	ImVec2 bmax = ImGui_GetItemRectMax();
-	bmin.x += KEY_WIDTH/2;
+	bmin.x += key_width/2;
 	bmin.y += get_override_marker_width();
-	bmax.x -= KEY_WIDTH/2;
+	bmax.x -= key_width/2;
 
 	ImDrawList* draw_list = ImGui_GetWindowDrawList();
 
@@ -480,7 +486,7 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 		for (int32_t i = 0; i < grad->stops_count; i++) {
 			float x = bmin.x + stops[i].t * (bmax.x - bmin.x);
 			ImU32 color = ImGui_GetColorU32ImVec4(stops[i].color);
-			ImDrawList_AddRectFilledMultiColor(draw_list, (ImVec2){ prev_x, bmin.y }, (ImVec2){x,bmax.y}, prev_color, color, color, prev_color);
+			ImDrawList_AddRectFilledMultiColor(draw_list, (ImVec2){ prev_x, bmin.y }, (ImVec2){x, bmax.y}, prev_color, color, color, prev_color);
 			prev_x = x;
 			prev_color = color;
 		}
@@ -528,22 +534,46 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 			color_stop_t* stop = &grad->stops[i];
 			ImGui_PushIDInt(stop->id);
 
-			ImGui_BeginPack(ImGui_GetRowRect(ImGui_DefaultRowHeight));
+			ImRect row_rect = ImGui_GetRowRect(ImGui_DefaultRowHeight);
+			ImGui_BeginPack(row_rect);
+
+			const bool item_is_override = stop->is_inserted;
+			const bool item_has_overrides = color_stop_has_overrides(stop);
 
 			// Override marker for the whole row
-			ImGui_PackNextSlotEx(measure_override_marker(), ImGuiPack_Start, ImGuiAlign_Center, get_override_marker_space());
-			override_marker(is_derived && stop->is_inserted, is_derived && color_stop_has_overrides(stop));
+			if (is_derived)
+				override_marker_overlay(row_rect, item_is_override, item_has_overrides);
 
-			ImGui_PackAdvance(ImGuiPack_Start, ImGui_GetFrameHeight()/2.f);
+			// Row icon so that we have space for full row indicator and first widget indicator
+			ImGui_PackNextSlot(ImGui_MeasureIcon(), ImGuiPack_Start, ImGuiAlign_Center);
+			ImGui_IconColored(ICON_KEYFRAME, IM_COL32(255,255,255,128));
 
-			// Restore
+			// Revert button
 			if (is_derived) {
-				bool is_modified = stop->is_inserted || color_stop_has_overrides(stop);
 				ImGui_PackNextSlotEx(ImGui_MeasureIconButton(), ImGuiPack_End, ImGuiAlign_Center, 0.f);
-				if (ImGui_IconButtonColoredEx(ICON_ARROW_BACK, IM_COL32(255, 255, 255, 128), is_modified)) {
-					command = command_make_revert_at(i);
+				if (ImGui_IconButtonColoredEx(ICON_ARROW_BACK, IM_COL32(255, 255, 255, 128), item_has_overrides || item_is_override)) {
+					if (ImGui_GetIO()->KeyCtrl)
+						command = command_make_revert_at(i);
+					else
+						ImGui_OpenPopup("revert_menu", 0);
 				}
-				ImGui_SetItemTooltip("Revert modifications.");
+				ImGui_SetItemTooltip("Revert changes.");
+
+				if (ImGui_BeginPopup("revert_menu", 0)) {
+
+					if (ImGui_MenuItemWithIconEx("Revert All", ICON_ARROW_BACK, NULL, false, item_has_overrides || item_is_override)) {
+						command = command_make_revert_at(i);
+					}
+					if (ImGui_MenuItemWithIconEx("Revert property Position", ICON_EDIT, NULL, false, stop->override_t)) {
+						stop->override_t = false;
+						changed = true;
+					}
+					if (ImGui_MenuItemWithIconEx("Revert property Color", ICON_EDIT, NULL, false, stop->override_color)) {
+						stop->override_color = false;
+						changed = true;
+					}
+					ImGui_EndPopup();
+				}
 			}
 
 			// Remove
@@ -562,12 +592,8 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 					stop->override_t = true;
 				changed = true;
 			}
-			if (is_derived) {
-				if (item_override_marker(stop->override_t)) {
-					stop->override_t = false;
-					changed = true;
-				}
-			}
+			if (is_derived)
+				override_marker_overlay(ImGui_GetItemRect(), stop->override_t, false);
 
 			// Color
 			ImGui_PackNextSlotPct(1.f, row_h, ImGuiPack_Start, ImGuiAlign_Center);
@@ -579,12 +605,8 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 					stop->override_color = true;
 				changed = true;
 			}
-			if (is_derived) {
-				if (item_override_marker(stop->override_color)) {
-					stop->override_color = false;
-					changed = true;
-				}
-			}
+			if (is_derived)
+				override_marker_overlay(ImGui_GetItemRect(), stop->override_color, false);
 
 			ImGui_EndPack();
 

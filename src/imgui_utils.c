@@ -110,7 +110,7 @@ void setup_imgui_style(ImGuiStyle* style, float scale)
 	ImGuiStyle_ScaleAllSizes(style, scale);
 
 	g_override_marker_width = ImMaxf(2.f,IM_TRUNC(style->ItemSpacing.x / 4.f));
-	g_override_marker_space = ImMaxf(1.f, IM_TRUNC(g_override_marker_width/2.f));
+	g_override_marker_space = ImMaxf(1.f, IM_TRUNC(g_override_marker_width * 0.75f));
 
 }
 
@@ -435,84 +435,17 @@ ImRect ImGui_EndPack(void)
 // Custom
 //
 
-ImVec2 measure_override_marker(void)
+void override_marker_overlay(ImRect rect, bool is_override, bool has_overrides)
 {
-	float frame_h = ImGui_GetFrameHeight();
-	return (ImVec2){
-		.x = get_override_marker_width(),
-		.y = frame_h,
-	};
-}
-
-void override_marker(bool is_overridden, bool has_overrides)
-{
-	float frame_h = ImGui_GetFrameHeight();
-	ImGuiStyle* style = ImGui_GetStyle();
-
-	ImGui_Dummy((ImVec2){get_override_marker_width(), frame_h});
-	ImVec2 bmin = ImGui_GetItemRectMin();
-	ImVec2 bmax = ImGui_GetItemRectMax();
-
-	if (is_overridden || has_overrides) {
+	if (is_override | has_overrides) {
+		ImGuiStyle* style = ImGui_GetStyle();
 		ImDrawList* draw_list = ImGui_GetWindowDrawList();
-		ImVec2 marker_bmin = { bmin.x, bmin.y };
-		ImVec2 marker_bmax = { bmin.x + get_override_marker_width(), bmax.y };
-		ImDrawList_AddRectFilled(draw_list, marker_bmin, marker_bmax, is_overridden ? OVERRIDE_COLOR : OVERRIDE_COLOR_DIM);
-	}
-}
-
-bool item_override_marker(bool is_override)
-{
-	bool result = false;
-
-	ImRect rect = ImGui_GetItemRect();
-
-	if (is_override) {
-		ImDrawList* draw_list = ImGui_GetWindowDrawList();
-		ImDrawList_AddRectFilled(draw_list,
+		ImDrawList_AddRectFilledEx(draw_list,
 			(ImVec2){rect.Min.x - get_override_marker_width() - get_override_marker_space(), rect.Min.y},
 			(ImVec2){rect.Min.x - get_override_marker_space(), rect.Max.y},
-			OVERRIDE_COLOR);
+			is_override ? OVERRIDE_COLOR : OVERRIDE_COLOR_DIM,
+			style->FrameRounding, ImDrawFlags_RoundCornersLeft);
 	}
-
-	if (ImGui_IsMouseReleased(ImGuiMouseButton_Right) && ImGui_IsMouseHoveringRect(rect.Min, rect.Max))
-		ImGui_OpenPopup("##override_popup", 0);
-
-	if (ImGui_BeginPopup("##override_popup", 0)) {
-		ImGui_BeginDisabled(!is_override);
-		if (ImGui_MenuItemWithIcon("Revert Change", ICON_ARROW_BACK)) {
-			result = true;
-		}
-		ImGui_EndDisabled();
-		ImGui_EndPopup();
-	}
-	return result;
-}
-
-bool override_marker_box(ImRect rect, bool is_override)
-{
-	bool result = false;
-
-	if (is_override) {
-		ImDrawList* draw_list = ImGui_GetWindowDrawList();
-		ImDrawList_AddRectFilled(draw_list,
-			(ImVec2){rect.Min.x - get_override_marker_width() - get_override_marker_space(), rect.Min.y},
-			(ImVec2){rect.Min.x - get_override_marker_space(), rect.Max.y},
-			OVERRIDE_COLOR);
-	}
-
-	if (ImGui_IsMouseReleased(ImGuiMouseButton_Right) && ImGui_IsMouseHoveringRect(rect.Min, rect.Max))
-		ImGui_OpenPopup("##override_popup", 0);
-
-	if (ImGui_BeginPopup("##override_popup", 0)) {
-		ImGui_BeginDisabled(!is_override);
-		if (ImGui_MenuItemWithIcon("Revert Change", ICON_ARROW_BACK)) {
-			result = true;
-		}
-		ImGui_EndDisabled();
-		ImGui_EndPopup();
-	}
-	return result;
 }
 
 
@@ -521,6 +454,9 @@ array_header_state_t edit_array_header(const char* label, int32_t item_count, ui
 {
 	array_header_state_t res = {0};
 
+	ImGuiWindow* window = ImGui_GetCurrentWindow();
+	const float outer_extend = IM_TRUNC(window->WindowPadding.x * 0.5f); // Framed header expand a little outside of current limits
+	ImVec2 padding = ImGui_GetStyle()->FramePadding;
 	ImDrawList* draw_list = ImGui_GetWindowDrawList();
 
 	ImGui_PushStyleColor(ImGuiCol_Header, ARRAY_HEADER_BG_COLOR);
@@ -532,25 +468,22 @@ array_header_state_t edit_array_header(const char* label, int32_t item_count, ui
 
 	ImGui_PopStyleColorEx(3);
 
-	ImRect header_bb = ImGui_GetItemRect();
-	if (flags & (ARRAY_HEADER_IS_MODIFIED | ARRAY_HEADER_HAS_MODIFIED_ITEMS)) {
-		// Modified marker
-		if (flags & (ARRAY_HEADER_IS_MODIFIED | ARRAY_HEADER_HAS_MODIFIED_ITEMS)) {
-			ImVec2 marker_bmin = header_bb.Min;
-			ImVec2 marker_bmax = { header_bb.Min.x + get_override_marker_width(), header_bb.Max.y };
-			ImDrawList_AddRectFilled(draw_list, marker_bmin, marker_bmax, (flags & ARRAY_HEADER_IS_MODIFIED) ? OVERRIDE_COLOR : OVERRIDE_COLOR_DIM);
-		}
-	}
+	ImGui_PushStyleVarX(ImGuiStyleVar_FramePadding, outer_extend);
 
+	ImRect header_bb = ImGui_GetItemRect();
 	ImRect header_content_bb = ImGui_GetItemContentRect();
+
+	ImGui_PopStyleVar();
+
+	// Override marker
+	override_marker_overlay(header_bb, flags & ARRAY_HEADER_IS_MODIFIED, flags & ARRAY_HEADER_HAS_MODIFIED_ITEMS);
+
 	ImGui_BeginPack(header_content_bb);
 
 	// Label
 	ImVec2 label_size = ImGui_MeasureTextUnformatted(label);
 	ImGui_PackNextSlot(label_size, ImGuiPack_Start, ImGuiAlign_Center);
 	ImGui_TextUnformatted(label);
-
-
 
 	// Revert
 	if (flags & ARRAY_HEADER_HAS_REVERT) {
@@ -570,7 +503,7 @@ array_header_state_t edit_array_header(const char* label, int32_t item_count, ui
 	// Inherit button
 	if (flags & ARRAY_HEADER_ALLOW_INHERIT) {
 		ImRect link_bb = ImGui_PackNextSlotEx(ImGui_MeasureIconButton(), ImGuiPack_End, ImGuiAlign_Center, 0.f);
-		res.inherit_is_clicked = ImGui_IconButton(ICON_COPY_PLUS);
+		res.inherit_is_clicked = ImGui_IconButton(ICON_CUBE_PLUS);
 		res.inherit_is_tooltip_hovered = ImGui_IsItemHovered(ImGuiHoveredFlags_ForTooltip);
 		res.menu_pos = (ImVec2){ link_bb.Min.x, link_bb.Max.y };
 	}
