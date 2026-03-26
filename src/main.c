@@ -49,6 +49,8 @@ void request_tick(int32_t tick_count)
 // Periodic timer that will redraw in case no activity.
 Uint32 handle_redraw_timer(void* userdata, SDL_TimerID timerID, Uint32 interval)
 {
+	(void)userdata;
+	(void)timerID;
 	if (g_redraw_handled)
 		request_tick(0);
 	return interval;
@@ -444,6 +446,9 @@ SDL_AppResult SDL_Fail()
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 {
+	(void)appstate;
+	(void)argc;
+	(void)argv;
 	// init the library, here we make a window so we only need the Video capabilities.
 	if (!SDL_Init(SDL_INIT_VIDEO))
 		return SDL_Fail();
@@ -464,7 +469,6 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 	SDL_AddTimer(250, handle_redraw_timer, NULL);
 
 	// GL 3.0 + GLSL 130
-	const char* glsl_version = "#version 130";
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -530,6 +534,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 
 SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 {
+	(void)appstate;
 	// Skip our custom tick event.
 	if (event->type == g_tick_event) {
 		return SDL_APP_CONTINUE;
@@ -548,8 +553,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 
 SDL_AppResult SDL_AppIterate(void* appstate)
 {
-	// draw a color
-	double time = (double)SDL_GetTicksNS() / 1000000000.0;
+	(void)appstate;
 
 	int32_t win_width, win_height;
 	int32_t fb_width, fb_height;
@@ -575,8 +579,8 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	data_inheritance_demo();
 
-	static bool op = true;
-	ImGui_ShowMetricsWindow(&op);
+//	static bool show_metrics = true;
+//	ImGui_ShowMetricsWindow(&show_metrics);
 
 	ImGui_Render();
 	cImGui_ImplOpenGL3_RenderDrawData(ImGui_GetDrawData());
@@ -606,6 +610,8 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 void SDL_AppQuit(void* appstate, SDL_AppResult result)
 {
+	(void)appstate;
+	(void)result;
 	cImGui_ImplOpenGL3_Shutdown();
 	cImGui_ImplSDL3_Shutdown();
 	ImGui_DestroyContext(NULL);
