@@ -22,6 +22,15 @@ static void merge_array_remove_at(merge_array_t* merge, int32_t idx)
 		merge->items[j] = merge->items[j + 1];
 }
 
+static void merge_array_remove(merge_array_t* merge, uid_t id)
+{
+	int32_t idx = merge_array_find_by_base_id(merge, id);
+	if (idx == INVALID_INDEX) return;
+	merge->items_count--;
+	for (int32_t j = idx; j < merge->items_count; j++)
+		merge->items[j] = merge->items[j + 1];
+}
+
 void merge_array_add(merge_array_t* merge, merge_item_t new_item)
 {
 	if (merge->items_count >= MAX_ITEMS)
@@ -59,13 +68,9 @@ void merge_array_reconcile(merge_array_t* base, merge_array_t* derived)
 				i--;
 				continue;
 			}
-			if (item->is_pinned) {
-				// Remove pinned items from base, as they are always picked from derived.
-				merge_array_remove_at(base, item->base_idx);
-			} else {
-				// Match related derived item in base.
-				base->items[item->base_idx].derived_idx = item->derived_idx;
-			}
+			// Mark mathing base pinned too so that we know to skip it..
+			base->items[item->base_idx].is_pinned = item->is_pinned;
+			base->items[item->base_idx].derived_idx = item->derived_idx;
 		} else {
 			// This item does not exist on base, it's inserted to derived and must be pinned.
 			item->is_pinned = true;
@@ -108,11 +113,13 @@ void merge_array_reconcile(merge_array_t* base, merge_array_t* derived)
 			}
 			// Add skipped amount of unmodified items, or adjacent items that were added to the base.
 			while (cur_base_idx < base->items_count && (count > 0 || base->items[cur_base_idx].derived_idx == INVALID_INDEX)) {
-				assert(results_count+1 <= MAX_ITEMS);
-				results[results_count++] = base->items[cur_base_idx];
-				// New items do not count against the quota.
-				if (base->items[cur_base_idx].derived_idx != INVALID_INDEX)
-					count--;
+				if (!base->items[cur_base_idx].is_pinned) {
+					assert(results_count+1 <= MAX_ITEMS);
+					results[results_count++] = base->items[cur_base_idx];
+					// New items do not count against the quota.
+					if (base->items[cur_base_idx].derived_idx != INVALID_INDEX)
+						count--;
+				}
 				cur_base_idx++;
 			}
 		}
