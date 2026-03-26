@@ -2,7 +2,7 @@
 
 ![Image of Data Inheritance prototype](images/header.png)
 
-This article and source code explains a simple implementation of data inheritance. Data inheritance means that you can create variations of existing data, override values, and any changes to the base data will update to the deried data when it is changed.
+This article and source code explains a simple implementation of data inheritance. Data inheritance means that you can create variations of existing data, override values, and any changes to the base data will update to the derived data when it is changed.
 
 Prefabs, prefabs variants, and nested prefabs are the most common applications of data inheritance in game dev. But it does not need to be limited to just that. Any asset or data type could and should support data inheritance. This article tries to lay down some tools to be able to do that.
 
@@ -11,7 +11,7 @@ The whole stack for a data asset could look like this:
 - **Data Inheritance**: abstraction over how to transfer changes to base data to derived data
 - **Hierarchical data**: abstraction over composing data from different types of data (e.g. entities & components, json)
 - **Type System and Reflection**: abstraction over types and properties
-- **Serialization**: abstraction over how data gets stored one disk or buffers
+- **Serialization**: abstraction over how data gets stored on disk or buffers
 - **Asset Database**: abstraction over how assets are loaded and referenced
 
 This article focuses on the **data inheritance** specifically to make the concepts easy to follow.
@@ -19,24 +19,24 @@ This article focuses on the **data inheritance** specifically to make the concep
 
 ## Inheritance Model
 
-We choose to represent the *base data* and *derived data* using the same data types, structs in the examples below. In addition, we have meta data, an override flag, that is used to indicate if the value is different from the base data. This allows the derived data to be as fast and easy to access as the base, and it is even possible to snapshot a version an wipeout all the meta data for a release version of asset.
+We choose to represent the *base data* and *derived data* using the same data types, structs in the examples below. In addition, we have metadata, an override flag, that is used to indicate if the value is different from the base data. This allows the derived data to be as fast and easy to access as the base, and it is even possible to snapshot a version and wipeout all the metadata for a release version of asset.
 
 ![Inheritance Model](images/model.svg)
 
-Things get more complicated with containers like arrays. A big part of this article is try to explain how the extend the basic idea to work with containers.
+Things get more complicated with containers like arrays. A big part of this article is to try to explain how to extend the basic idea to work with containers.
 
 There are two common ways to represent how the derived data differs from the base: delta (implicit), and flags (explicit). With the delta method, a simple diff is done after the data has been changed to find the items that are different compared to the base data. With the explicit flag method, data is marked as overridden when it is changed.
 
-We choose explicit flag, since it is just a lot simpler to implement. In both cases it is important that the override flag is set it will stay set, until the user clears it. Otherwise you get value drifts, which are really hard to debug and reason about.
+We choose explicit flag, since it is just a lot simpler to implement. In both cases it is important that if the override flag is set, it will stay set until the user clears it. Otherwise you get value drifts, which are really hard to debug and reason about.
 
-An example of value drift is that if base data has property A that is set to 2, and derived data now changes that to 3 and override flag is set. If base data is now changed to 3, the diff will think that no override is present, and any further changes to the base data will cause derived to change too. In the cases I have had to debug, the drift has been super rate and has happened over long period of time (months).
+An example of value drift is that if base data has property A that is set to 2, and derived data now changes that to 3 and override flag is set. If base data is now changed to 3, the diff will think that no override is present, and any further changes to the base data will cause derived to change too. In the cases I have had to debug, the drift has been super rare and has happened over long period of time (months).
 
 
 ## The Override flag
 
 ![Shape UI](images/shape.png)
 
-The override flag works simply by having a bit of extra information in the derived data whether a property is overridden or not. At it simplest it could look something like this:
+The override flag works simply by having a bit of extra information in the derived data whether a property is overridden or not. At its simplest it could look something like this:
 
 ```C
 struct {
@@ -60,7 +60,7 @@ void set_size(collision_shape_t* shape, float new_size)
 }
 ```
 
-I'm intentionally leaving out the implementation of `shape_is_derived()` as I imagine it is part of the *Hierarchical Data* level depicted above. The overal data container, the file, or component, or node should know if it is derived and where to find the base data.
+I'm intentionally leaving out the implementation of `shape_is_derived()` as I imagine it is part of the *Hierarchical Data* level depicted above. The overall data container, the file, or component, or node should know if it is derived and where to find the base data.
 
 To update the data from base to derived, we can simply do this:
 
@@ -74,13 +74,13 @@ void update_inherited_data(const collision_shape_t* base, collision_shape_t* der
 }
 ```
 
-That is, we simply just copy over that data that is not overridden.
+That is, we simply just copy over the data that is not overridden.
 
 ### Enums Bitflags
 
 ![Enum UI](images/enum.png)
 
-We need to pay some extra attention when dealing with enum bitflags. One way to look at the bit flags is to treat them as a set of boolean. That is, the bit name is kind of the variable name. This also implies that we need an override flag per enum bit. 
+We need to pay some extra attention when dealing with enum bitflags. One way to look at the bit flags is to treat them as a set of booleans. That is, the bit name is kind of the variable name. This also implies that we need an override flag per enum bit. 
 
 Let's say we add `hit_flags` bit flags to our collision shape, like this:
 
@@ -102,7 +102,7 @@ typedef struct {
 } collision_shape_t;
 ```
 
-Than we can use the same storage type and same bits for the override as we use for the bit flags. As we set or clear a bit, we also set the associated override bit.
+Then we can use the same storage type and same bits for the override as we use for the bit flags. As we set or clear a bit, we also set the associated override bit.
 
 We can use cool bitmask trick to copy the overridden bits over without conditions:
 
@@ -127,7 +127,7 @@ All of the above looks very repetitive, and it can be quite easily automated usi
 
 Things get more complicated when we have arrays of data. We have to consider things like how do we match the array entries between base and derived data? What if someone removes an item from base, or what if we delete an item in derived that is also present in base? Or add a new item, or reorder items?
 
-So the main challanges are: 
+So the main challenges are: 
 - how do we relate data between base and derived data?
 - and, how to maintain the order of the data?
 
@@ -135,7 +135,7 @@ Next we'll look into a couple of different solutions for common use cases.
  
 One more thing to note about arrays is that, the arrays we use to store values can have different use semantics. Sometimes we want only unique items (a set), sometimes the order matters, sometimes does not, and sometimes the order can be deduced from the data itself.
 
-We're going to look 6 differnt types of containers which cover most of the use cases for creative tools and games:
+We're going to look at 6 different types of containers which cover most of the use cases for creative tools and games:
 - **Set**: we want a collection of items that are all unique, for example a tag container.
 - **Sorted Array**: we store items in an array, but the order comes from sort, for example a curve or gradient.
 - **Un-ordered Array**: we store items in an array, but the order does not matter at all, for example node graph nodes
@@ -145,7 +145,7 @@ We're going to look 6 differnt types of containers which cover most of the use c
 
 ### Which Type to Choose?
 
-In general we should allow users to organize their data, and this might contradict to what the container type does (sets and maps). For that reason many of the types in the list are ordered. There are many use case where the ordering does not matter for code functionality, but it might be important to allow the users to organize the data.
+In general, we should allow users to organize their data, and this might contradict to what the container type does (sets and maps). For that reason many of the types in the list are ordered. There are many use case where the ordering does not matter for code functionality, but it might be important to allow the users to organize the data.
 
 Sorted arrays is an example where the data is always strictly ordered based on the properties of the data. Some examples are timelines, gradients and value based lookup tables, where the data's position is their natural ordering.
 
@@ -164,7 +164,7 @@ A set is a collection of items where each item exists inly once. This makes it r
 
 The most common use for set is gameplay tag collection, aka user-defined-mega-enum. As already hinted, sets with finite amount of items can be thought as an extension of enum. 
 
-To follow our override strategy from previous example, we can define an overridable set with a regular array of tags that should be included, and another array of tags in meta data that describes the tags that has been overridden. Just like we did for enum bit flags.
+To follow our override strategy from previous example, we can define an overridable set with a regular array of tags that should be included, and another array of tags in metadata that describes the tags that has been overridden. Just like we did for enum bit flags.
 
 In this example we assume that each tag can be represented using an integer, in practice there is usually some central system that assigns ids to the tags, either via string interning or some other method.
 
@@ -341,12 +341,12 @@ There is no perfect solution to this, as the array simply does not capture enoug
 - *Maintain clusters*:
 	- we assume that items that were modified together should stay together
 - *Handle common operations predictably*:
-	- items added to to the end of the derived array should be kept there
-	- items added to to the beginning of the derived array should kept there
+	- items added to the end of the derived array should be kept there
+	- items added to the beginning of the derived array should be kept there
 	- items added to the middle of the base array should appear in their relative position in the derived
 
 
-The data for this example is a to do list: 
+The data for this example is a todo list: 
 
 ```C
 typedef struct {
@@ -369,7 +369,7 @@ typedef struct {
 } todo_list_t;
 ```
 
-The `is_inserted` per action works the same as before, so does the property overrides, there is new override `override_array_index` which indicates that we have modified the (implicit) ordering and we want to keep the item similarly positioned as it currently is in the derived array. The container is build simiarly as before, we have list of items, and discarded list.
+The `is_inserted` per action works the same as before, so does the property overrides, there is new override `override_array_index` which indicates that we have modified the (implicit) ordering, and we want to keep the item similarly positioned as it currently is in the derived array. The container is build similarly as before, we have list of items, and discarded list.
 
 
 To help us to create a reusable merge, we will make an intermediate representation of the items that is temporarily used during the merge:
@@ -390,7 +390,7 @@ typedef struct array_merge {
 } merge_array_t;
 ```
 
-We will make a merge array for both the *base* and *derived* data. The `id` is the ID of the item, we only care about the IDs that are shared by base and derided. The `base_idx` and `derived_idx` desribe the index of the given item in either array. Finally `is_pinned` is used only for the derived array, and it marks items which we want to keep in specific order in the output.
+We will make a merge array for both the *base* and *derived* data. The `id` is the ID of the item, we only care about the IDs that are shared by base and derided. The `base_idx` and `derived_idx` describe the index of the given item in either array. Finally `is_pinned` is used only for the derived array, and it marks items which we want to keep in specific order in the output.
 
 We convert from our list of structs to the merge arrays like this:
 
@@ -534,7 +534,7 @@ void merge_array_reconcile_ordered(merge_array_t* base, merge_array_t* derived)
 	...
 ```
 
-In the first loop we match items between base and derived, and exchange the indices of the items that match. Then we remove all the discarded items from the base array as if they never existed. After this the derived array contains runs of pinned items (inserted or reodered), and runs of items that should be copied from the base data as is. The base array contains only the items that we should carry over to the derived data.
+In the first loop we match items between base and derived, and exchange the indices of the items that match. Then we remove all the discarded items from the base array as if they never existed. After this the derived array contains runs of pinned items (inserted or reordered), and runs of items that should be copied from the base data as is. The base array contains only the items that we should carry over to the derived data.
 
 The main idea of the next merge step is to iterate both arrays in lock step, and take pinned (overridden) items from the derived array, and non-pinned items from the base. We are going to use the derived array as template for ordering. If there is a run of pinned items in the derived array, we will take them. For a run of non-pinned items, we take equal amount of (non-pinned) items from base. If we encounter new item from base while we are adding items from base, they will be added "for free" and do not contribute against the count we set to copy from.
 
@@ -591,9 +591,9 @@ Reordering the items in base will not change the cluster sizes in derived. That 
 
 ### Alternatives ways to order the data
 
-Fractional indexing is a quite popular option for array ordering, especially in the web space. The idea is to assing an index (that is fractional) to each item, and use sorting to reorder the items after merge. When a new item is inserted, it's index is midway between the adjacent items. This method has some down sides like empty ranges (when two items are added to same location) and unbounded index length, and item interleaving (items added in same location will get mixed up). 
+Fractional indexing is a quite popular option for array ordering, especially in the web space. The idea is to assing an index (that is fractional) to each item, and use sorting to reorder the items after merge. When a new item is inserted, it's index is midway between the adjacent items. This method has some downsides like empty ranges (when two items are added to same location) and unbounded index length, and item interleaving (items added in same location will get mixed up). 
 
-Longest edit subsequence or longest increasing subsequence could be used to improve the alignment of the merged arrays. Particularly when items are reodered in the base array. I have tested with quite a few alignment options, and they work most of the time, but sometimes the results can be quite unpredictable, particularly if an item was rerdered to opposite end. Quite a bit of heuristics might be needed to get stable feeling results.
+Longest edit subsequence or longest increasing subsequence could be used to improve the alignment of the merged arrays. Particularly when items are reordered in the base array. I have tested with quite a few alignment options, and they work most of the time, but sometimes the results can be quite unpredictable, particularly if an item was reordered to opposite end. Quite a bit of heuristics might be needed to get stable feeling results.
 
 ## Ordered Map
 
@@ -606,7 +606,7 @@ For example, we might have a mapping from button codes to actions, say we start 
 - **Button A** -> Jump
 - **Button B** -> Fire
 
-Now if we wanted to switch over the buttons in the UI, might change the first item's key from **A** to **B**. But that would override the existing **B** and we would loose data. Sets have similar issue, and should left for data that can be thought as tags containers and such.
+Now if we wanted to switch over the buttons in the UI, might change the first item's key from **A** to **B**. But that would override the existing **B,** and we would lose data. Sets have similar issue, and should be left for data that can be thought as tags containers and such.
 
 One option to implement maps is to just treat them as ordered arrays, then add validation and lookup index. Ordered array has predictable UI workflows, and you can use validation to mark duplicate entries. A separate lookup index allows map-like fast query, and graceful handling of duplicates (e.g. do not add duplicates, or last item wins, etc).
 
@@ -617,7 +617,7 @@ One option to implement maps is to just treat them as ordered arrays, then add v
 
 So far we have dealt with items with IDs which are locally identified per container. The IDs have influence only across the chain of derived assets.
 
-There are cases where the ID assgined to an item represents an object in the whole system or within an asset. In such cases we need to store extra data to match the IDs to their couter part in base data, we call this addition reference `base_id`.
+There are cases where the ID assigned to an item represents an object in the whole system or within an asset. In such cases we need to store extra data to match the IDs to their counterpart in base data, we call this addition reference `base_id`.
 
 ![Inheritance](images/inheritance.svg)
 
@@ -740,17 +740,17 @@ We use the same merge as in ordered array. The handling of the inherited nodes i
 
 ![Image of Data Inheritance protoytype](images/footer.png)
 
-The challenge for the override visualization is that it needs to work with many different types of widgets and contexts. A fairly common way to represent a overridden property is drawing a colored (usually blue) vertical line at the begining of the changed line. It is not too distracting, yet quick to recognize at glance. The simple shape is quite easy to slap next to just about any widget.
+The challenge for the override visualization is that it needs to work with many different types of widgets and contexts. A fairly common way to represent an overridden property is drawing a colored (usually blue) vertical line at the beginning of the changed line. It is not too distracting, yet quick to recognize at glance. The simple shape is quite easy to slap next to just about any widget.
 
-We should also have a way to indicate that there are overrides within a data container (object, array, etc). This allows to quickly see where the overriden data is even if the actual data is outside the view or inside collapsed UI. In the prototype I'm using the same indicator, but dimmer.
+We should also have a way to indicate that there are overrides within a data container (object, array, etc). This allows to quickly see where the overridden data is even if the actual data is outside the view or inside collapsed UI. In the prototype I'm using the same indicator, but dimmer.
 
 The override indicator also should be granular enough that if you have laid out multiple widgets on the same row, each of them can be highlighted out separately.
 
-One property that is invisble is the array item order. I tested with various ways to visualize that, but they all felt really heavy. In the end I settled on just showing that "something has changed on these rows". I feel like some indicator would be in order.
+One property that is invisible is the array item order. I tested with various ways to visualize that, but they all felt really heavy. In the end I settled on just showing that "something has changed on these rows". I feel like some indicator would be in order.
 
 ![Gradient UI](images/gradient.png)
 
-One challange I faced in this prototype was how to apply the indicator to markers, like keyframes. Many options I tried felt too much like the marker was selected. I eventually settled in a horizontal line over the marker, as it did not look like anything that felt like it had meaning on the timeline.
+One challenge I faced in this prototype was how to apply the indicator to markers, like keyframes. Many options I tried felt too much like the marker was selected. I eventually settled in a horizontal line over the marker, as it did not look like anything that felt like it had meaning on the timeline.
 
 In addition to the indicator we also need a way to revert the changes. For widget rows, the easiest is to have a button, or an option in right click menu. Some applications seem to combine the revert button and per row override indicator, which can also be a good idea.
 
@@ -758,7 +758,7 @@ Removed items need extra care, since they are not represented in the UI. I chose
 
 The revert button on the container header allows all the changes to be reverted, or more granular way to revert the removed items. Laying multiple items on the same line also creates issue for the revert UI. In this prototype I chose to summon a menu, which allows the whole row to be reverted or individual items. 
 
-I dont like how in this prototype the revert is different for the single property vs multi property case. Maybe the revert could always be full row, and you would use right click to summon the more details options.
+I don't like how in this prototype the revert is different for the single property vs multi property case. Maybe the revert could always be full row, and you would use right click to summon the more details options.
 
 The revert UI can get as complex as the rest of the UI. We are essentially building a tool that handles the invisible connections between two documents.
 
@@ -788,12 +788,10 @@ You may need to adjust the debugger working directory in the IDE to `build/src`.
 
 > **Note**: the build currently uses a version of Dear Bindings that is not release yet, you will need `dear_bindings_docking_clang_withgeneratedefaultargfunctions.zip` from: https://github.com/dearimgui/dear_bindings/actions/runs/22354685115
 
-And you will need to adjust the `src/CmakeList.txt` to point to your file:
+And you will need to adjust the `CmakeList.txt` to point to your file:
 ```
-# DCIMGUI
 FetchContent_Declare(dcimgui_external
-#	URL https://github.com/dearimgui/dear_bindings/actions/runs/22354685115/artifacts/5636220484
 	URL file://C:/Users/memon/Downloads/dear_bindings_docking_clang_withgeneratedefaultargfunctions.zip
 	EXCLUDE_FROM_ALL
 )
-```	
+```
