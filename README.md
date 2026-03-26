@@ -504,13 +504,9 @@ void merge_array_reconcile_ordered(merge_array_t* base, merge_array_t* derived)
 				i--;
 				continue;
 			}
-			if (item->is_pinned) {
-				// Remove pinned items from base, as they are always picked from derived.
-				merge_array_remove_at(base, item->base_idx);
-			} else {
-				// Match related derived item in base.
-				base->items[item->base_idx].derived_idx = item->derived_idx;
-			}
+			// Mark mathing base pinned too so that we know to skip it..
+			base->items[item->base_idx].is_pinned = item->is_pinned;
+			base->items[item->base_idx].derived_idx = item->derived_idx;
 		} else {
 			// This item does not exist on base, it's inserted to derived and must be pinned.
 			item->is_pinned = true;
@@ -552,7 +548,6 @@ The main idea of the next merge step is to iterate both arrays in lock step, and
 			// Modified section, keep as is
 			while (cur_derived_idx < derived->items_count 
 					&& derived->items[cur_derived_idx].is_pinned) {
-				assert(results_count+1 <= MAX_ITEMS);
 				results[results_count++] = derived->items[cur_derived_idx];
 				cur_derived_idx++;
 			}
@@ -567,12 +562,12 @@ The main idea of the next merge step is to iterate both arrays in lock step, and
 			// Add skipped amount of unmodified items, or adjacent items that were added to the base.
 			while (cur_base_idx < base->items_count 
 					&& (count > 0 || base->items[cur_base_idx].derived_id == INVALID_ID)) {
-
-				assert(results_count+1 <= MAX_ITEMS);
-				results[results_count++] = base->items[cur_base_idx];
-				// New items do not count against the quota.
-				if (base->items[cur_base_idx].derived_id != INVALID_ID)
-					count--;
+				if (!base->items[cur_base_idx].is_pinned) {
+					results[results_count++] = base->items[cur_base_idx];
+					// New items do not count against the quota.
+					if (base->items[cur_base_idx].derived_idx != INVALID_INDEX)
+						count--;
+				}
 				cur_base_idx++;
 			}
 		}
