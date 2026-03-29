@@ -45,7 +45,7 @@ FetchContent_MakeAvailable(SDL3)
 # Dear ImGui
 FetchContent_Declare(imgui_external
 	GIT_REPOSITORY https://github.com/ocornut/imgui.git
-	GIT_TAG 2a1b69f05748ad909f03acf4533447cac1331611
+	GIT_TAG v1.92.6-docking
 	GIT_SHALLOW TRUE
 	GIT_PROGRESS TRUE
 )
