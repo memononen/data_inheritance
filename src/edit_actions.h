@@ -29,7 +29,7 @@ typedef struct action {
 	button_code_t button;
 	action_type_t action;
 	// Meta
-	uid_t id;
+	unid_t id;
 	bool has_id_conflict;
 	bool is_inserted;
 	bool override_array_index;
@@ -41,12 +41,12 @@ typedef struct action_map {
 	action_t actions[MAX_ACTIONS];
 	int32_t actions_count;
 	// Meta
-	uid_t discarded[MAX_ACTIONS];
+	unid_t discarded[MAX_ACTIONS];
 	int32_t discarded_count;
 	bool has_changes;
 } action_map_t;
 
-uid_t actions_add(action_map_t* actions, button_code_t button, action_type_t action);
+unid_t actions_add(action_map_t* actions, button_code_t button, action_type_t action);
 void actions_validate(action_map_t* actions);
 
 void actions_update_inherited_data(const action_map_t* base_actions, action_map_t* derived_actions);

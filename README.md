@@ -76,7 +76,7 @@ void update_inherited_data(const collision_shape_t* base, collision_shape_t* der
 
 That is, we simply just copy over the data that is not overridden.
 
-### Enums Bitflags
+### Enums bitflags
 
 ![Enum UI](images/enum.png)
 
@@ -141,7 +141,7 @@ We're going to look at 6 different types of containers which cover most of the u
 - **Un-ordered Array**: we store items in an array, but the order does not matter at all, for example node graph nodes
 - **Ordered Array**: the items in the array have specific order and we want to maintain it, or we want to keep the order to allow the user to organize the array, for example a todo list. 
 - **Ordered Map**: each item in the collection is identified by unique data the user can set, for example button bindings table.
-- **Array of Objects**: there are special conciderations for objects, for example node hierarchy.
+- **Array of Objects**: there are special considerations for objects, for example node hierarchy.
 
 ### Which Type to Choose?
 
@@ -179,6 +179,9 @@ typedef struct {
 	int32_t overrides_count;
 } tag_container_t;
 ```
+
+> **Note**: To simplify the example code, I did not use dynamic arrays (C does not natively support them), but static arrays and count instead. You may want to use dynamic arrays of your choice in your code.
+
 
 If the user adds or removes tag on the derived tag container, then we add unique entry to `overrides` (the same way we added a bit to the enum flags). That is, the values in the `overrides` describe if the specific tag was ever changed, and `tags` describe their existence.
 
@@ -222,22 +225,26 @@ The above merge routine does not try keep try the tags in any specific order. Fo
 
 ![Gradient UI](images/gradient.png)
 
-In order to be able to relate data between base and derived, we need something to identify the items uniquely for scross referencing. For the set, the items that we stored in the array were also the unique identifiers. But if we want to store arbitrary data, then we need to resort to additional unique identifier per item. Every time a new item is added to the array, it will be assigned a new unique ID.
+In order to be able to relate data between base and derived, we need something to identify the items uniquely for across referencing. For the set, the items that we stored in the array were also the unique identifiers. But if we want to store arbitrary data, then we need to resort to additional unique identifier per item. Every time a new item is added to the array, it will be assigned a new unique ID.
 
 The simplest thing is a random UID. Using random UIDs allows anyone anywhere to create new IDs without the risk of fearing that two will collide with others (fingers crossed!). This is important in terms of the inheritance, but also for merging changes via version control. The chance of collision will depend on the size of the UID, 8 bytes might be ok, 16 bytes is quite generally accepted as solid base.
 
 > **Note**: In the example code we will use 2 byte pseudo random IDs so that they are easy to visually debug. Do not use 2 bytes in production!
 
-Since we are also more than unique IDs, we can rethink how we store our overrides. We still need to know which items in the array are inserted or removed compared to the base data. For the items that are new on derived data we could store a flag that indicates that they are inserted. Since removed items do not have any representation, we need a separate array, like our previous overrides array to store the items that exiists in base but are removed in derived data. We call this *discarded list* to avoid confusion with other uses of removed.
+Since we are also more data than just the unique IDs, we can rethink how we store our overrides. We still need to know which items in the array are inserted or removed compared to the base data.
+
+For the items that are new on derived data we store an explicit flag that indicates that they are inserted, `is_inserted`. Since removed items do not have any representation, we use a separate array, like our previous overrides array to store the items that exists in base but are removed in derived data. We call this *discarded list* to avoid confusion with other uses of removed.
 
 Now our data could look as follows.
 
 ```C
+typedef int32_t unid_t; // Unique ID
+
 typedef struct {
 	float pos;
 	ImVec4 color;
 	// Meta
-	uid_t id;
+	unid_t id;
 	bool is_inserted;
 	bool override_color;
 	bool override_pos;
@@ -321,7 +328,7 @@ void gradient_update_inherited_data(const gradient_t* base_grad, gradient_t* der
 
 The merge looks very similar to the tag case, but the second loop is now more complicated as it needs to handle property override too. 
 
-We have also one extra loop, which will remove any discard overrides that don't exists anymore in the base. The thinking is that if an item is removed from base it should not ever come back, since we add unique ids to new items. There's once gotcha, though, if the user modifes base, then saves (which will trigger update), and then does undo, and saves again (update), then it is possible that the same id appears again. Other ways of undoing, like rolling back in version control has similar issues too. One option to handle this is to never automatically remove discarded IDs.
+We have also one extra loop, which will remove any discard overrides that don't exists anymore in the base. The thinking is that if an item is removed from base it should not ever come back, since we add unique ids to new items. There's once gotcha, though, if the user modifies the base, then saves (which will trigger update), and then does undo, and saves again (update), then it is possible that the same id appears again. Other ways of undoing, like rolling back in version control has similar issues too. One option to handle this is to never automatically remove discarded IDs.
 
 ## Un-ordered Array
 
@@ -353,7 +360,7 @@ typedef struct {
 	bool done;
 	char name[MAX_TASK_NAME];
 	// Meta
-	uid_t id;
+	unid_t id;
 	bool is_inserted;
 	bool override_array_index;
 	bool override_done;
@@ -364,7 +371,7 @@ typedef struct {
 	task_t tasks[MAX_TASKS];
 	int32_t tasks_count;
 	// Meta
-	uid_t discarded[MAX_TASKS];
+	unid_t discarded[MAX_TASKS];
 	int32_t discarded_count;
 } todo_list_t;
 ```
@@ -376,7 +383,7 @@ To help us to create a reusable merge, we will make an intermediate representati
 
 ```C
 typedef struct merge_item {
-	uid_t id;
+	unid_t id;
 	int32_t base_idx;
 	int32_t derived_idx;
 	bool is_pinned;
@@ -385,7 +392,7 @@ typedef struct merge_item {
 typedef struct array_merge {
 	merge_item_t items[MAX_ITEMS];
 	int32_t items_count;
-	uid_t discarded[MAX_ITEMS];
+	unid_t discarded[MAX_ITEMS];
 	int32_t discarded_count;
 } merge_array_t;
 ```
@@ -427,9 +434,9 @@ For the base merge array we set the `base_idx` and for the derived array we set 
 
 Items which have invalid `derived_idx` in the base array mean items that are missing in the derived array, and items with invalid `base_idx` in the derived array means items that they are insert in only in derived array. The inserted items' IDs are left blank, since we know that they are not represented in the base. 
 
-The indices are later used to quickly relocation the original data when we reoder the actual items.
+The indices are later used to quickly relocation the original data when we reorder the actual items.
 
-We set the `is_pinned` to all items in the derived merge array, that we wish to be keep in their current order in the final output. Here we have chosen to keep items that are inserted into the derived, and items that have neem reordered in the derived array. 
+We set the `is_pinned` to all items in the derived merge array, that we wish to be keep in their current order in the final output. Here we have chosen to keep items that are inserted into the derived, and items that have been reordered in the derived array. 
 
 The merge magic will update the changes from `base` to the `derived` merge array, and we convert back to the actions like this:
 
@@ -504,7 +511,7 @@ void merge_array_reconcile_ordered(merge_array_t* base, merge_array_t* derived)
 				i--;
 				continue;
 			}
-			// Mark mathing base pinned too so that we know to skip it..
+			// Mark matching base pinned too so that we know to skip it..
 			base->items[item->base_idx].is_pinned = item->is_pinned;
 			base->items[item->base_idx].derived_idx = item->derived_idx;
 		} else {
@@ -586,7 +593,7 @@ Reordering the items in base will not change the cluster sizes in derived. That 
 
 ### Alternatives ways to order the data
 
-Fractional indexing is a quite popular option for array ordering, especially in the web space. The idea is to assing an index (that is fractional) to each item, and use sorting to reorder the items after merge. When a new item is inserted, it's index is midway between the adjacent items. This method has some downsides like empty ranges (when two items are added to same location) and unbounded index length, and item interleaving (items added in same location will get mixed up). 
+Fractional indexing is a quite popular option for array ordering, especially in the web space. The idea is to assign an index (that is fractional) to each item, and use sorting to reorder the items after merge. When a new item is inserted, it's index is midway between the adjacent items. This method has some downsides like empty ranges (when two items are added to same location) and unbounded index length, and item interleaving (items added in same location will get mixed up). 
 
 Longest edit subsequence or longest increasing subsequence could be used to improve the alignment of the merged arrays. Particularly when items are reordered in the base array. I have tested with quite a few alignment options, and they work most of the time, but sometimes the results can be quite unpredictable, particularly if an item was reordered to opposite end. Quite a bit of heuristics might be needed to get stable feeling results.
 
@@ -623,10 +630,10 @@ By using the `is_inserted` flag we can differentiate the cases where we added a 
 ```C
 typedef struct node_ref {
 	char name[24];
-	int32_t id;
+	unid_t id;
 	// Meta
 	bool is_inserted;
-	int32_t base_id;
+	unid_t base_id;
 	bool override_array_index;
 } node_ref_t;
 
@@ -634,7 +641,7 @@ typedef struct node_ref_array {
 	node_ref_t nodes[MAX_NODES];
 	int32_t nodes_count;
 	// Meta
-	int32_t discarded[MAX_NODES];
+	unid_t discarded[MAX_NODES];
 	int32_t discarded_count;
 } node_ref_array_t;
 ```
@@ -733,7 +740,7 @@ We use the same merge as in ordered array. The handling of the inherited nodes i
 
 ## The UI
 
-![Image of Data Inheritance protoytype](images/footer.png)
+![Image of Data Inheritance prototype](images/footer.png)
 
 The challenge for the override visualization is that it needs to work with many different types of widgets and contexts. A fairly common way to represent an overridden property is drawing a colored (usually blue) vertical line at the beginning of the changed line. It is not too distracting, yet quick to recognize at glance. The simple shape is quite easy to slap next to just about any widget.
 
@@ -763,7 +770,7 @@ A robust and efficient solution for data inheritance can be hard to implement, s
 
 ## Prototype Project
 
-The project contains prototyp/demo code. The code is written in C using [Dear ImGui](https://github.com/ocornut/imgui) as the GUI library, and [Dear Bindings](https://github.com/dearimgui/dear_bindings) as C API. 
+The project contains prototype/demo code. The code is written in C using [Dear ImGui](https://github.com/ocornut/imgui) as the GUI library, and [Dear Bindings](https://github.com/dearimgui/dear_bindings) as C API. 
 
 ### Building
 
@@ -780,13 +787,3 @@ The project uses CMake for build config.
 	- *macOS*: use `cmake --build . -j$(sysctl -n hw.ncpu)`
 
 You may need to adjust the debugger working directory in the IDE to `build/src`.
-
-> **Note**: the build currently uses a version of Dear Bindings that is not release yet, you will need `dear_bindings_docking_clang_withgeneratedefaultargfunctions.zip` from: https://github.com/dearimgui/dear_bindings/actions/runs/22354685115
-
-And you will need to adjust the `CmakeList.txt` to point to your file:
-```
-FetchContent_Declare(dcimgui_external
-	URL file://C:/Users/memon/Downloads/dear_bindings_docking_clang_withgeneratedefaultargfunctions.zip
-	EXCLUDE_FROM_ALL
-)
-```

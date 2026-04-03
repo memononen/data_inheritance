@@ -42,7 +42,7 @@ void nodes_remove_at(node_ref_array_t* nodes, int32_t idx)
 		nodes->nodes[i] = nodes->nodes[i + 1];
 }
 
-int32_t nodes_index_of(const node_ref_array_t* nodes, uid_t id)
+int32_t nodes_index_of(const node_ref_array_t* nodes, unid_t id)
 {
 	if (id == INVALID_ID) return INVALID_INDEX;
 	for (int32_t i = 0; i < nodes->nodes_count; i++)
@@ -51,7 +51,7 @@ int32_t nodes_index_of(const node_ref_array_t* nodes, uid_t id)
 	return INVALID_INDEX;
 }
 
-void nodes_remove(node_ref_array_t* nodes, uid_t id)
+void nodes_remove(node_ref_array_t* nodes, unid_t id)
 {
 	int32_t idx = nodes_index_of(nodes, id);
 	if (idx == INVALID_INDEX) return;
@@ -59,7 +59,7 @@ void nodes_remove(node_ref_array_t* nodes, uid_t id)
 }
 
 
-bool nodes_is_override(const node_ref_array_t* nodes, uid_t id)
+bool nodes_is_override(const node_ref_array_t* nodes, unid_t id)
 {
 	for (int32_t i = 0; i < nodes->nodes_count; i++)
 		if (nodes->nodes[i].id == id)
@@ -70,7 +70,7 @@ bool nodes_is_override(const node_ref_array_t* nodes, uid_t id)
 	return false;
 }
 
-void nodes_mark_discarded(node_ref_array_t* nodes, uid_t id)
+void nodes_mark_discarded(node_ref_array_t* nodes, unid_t id)
 {
 	for (int32_t i = 0; i < nodes->discarded_count; i++)
 		if (nodes->discarded[i] == id)
@@ -79,7 +79,7 @@ void nodes_mark_discarded(node_ref_array_t* nodes, uid_t id)
 	nodes->discarded[nodes->discarded_count++] = id;
 }
 
-void nodes_clear_override(node_ref_array_t* nodes, uid_t id)
+void nodes_clear_override(node_ref_array_t* nodes, unid_t id)
 {
 	for (int32_t i = 0; i < nodes->nodes_count; i++) {
 		if (nodes->nodes[i].id == id) {
@@ -238,7 +238,7 @@ void nodes_update_inherited_data(const node_ref_array_t* base_nodes, node_ref_ar
 		derived_nodes->nodes[i] = result_nodes[i];
 }
 
-static bool edit_base_node_menu(const node_ref_array_t* base_nodes, uid_t* base_node_id)
+static bool edit_base_node_menu(const node_ref_array_t* base_nodes, unid_t* base_node_id)
 {
 	assert(base_nodes);
 	bool result = false;
@@ -546,7 +546,7 @@ bool edit_nodes(node_ref_array_t* nodes, const node_ref_array_t* base_nodes)
 		nodes_insert_at(nodes, command.idx, new_node);
 		changed = true;
 	} else if (command.type == COMMAND_REMOVE_AT) {
-		uid_t discarded_id = nodes->nodes[command.idx].base_id;
+		unid_t discarded_id = nodes->nodes[command.idx].base_id;
 		nodes_remove_at(nodes, command.idx);
 		if (is_derived)
 			nodes_mark_discarded(nodes, discarded_id);
@@ -568,7 +568,7 @@ bool edit_nodes(node_ref_array_t* nodes, const node_ref_array_t* base_nodes)
 		nodes_clear_discared(nodes);
 		changed = true;
 	} else if (command.type == COMMAND_REVERT_AT) {
-		uid_t reverted_id = nodes->nodes[command.idx].id;
+		unid_t reverted_id = nodes->nodes[command.idx].id;
 		nodes_clear_override(nodes, reverted_id);
 		changed = true;
 	} else if (command.type == COMMAND_BREAK_INHERITANCE_AT) {

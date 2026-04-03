@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 
-static int32_t merge_array_find_by_base_id(const merge_array_t* merge, uid_t id)
+static int32_t merge_array_find_by_base_id(const merge_array_t* merge, unid_t id)
 {
 	for (int32_t i = 0; i < merge->items_count; i++) {
 		if (merge->items[i].id == id)
@@ -22,7 +22,7 @@ static void merge_array_remove_at(merge_array_t* merge, int32_t idx)
 		merge->items[j] = merge->items[j + 1];
 }
 
-static void merge_array_remove(merge_array_t* merge, uid_t id)
+static void merge_array_remove(merge_array_t* merge, unid_t id)
 {
 	int32_t idx = merge_array_find_by_base_id(merge, id);
 	if (idx == INVALID_INDEX) return;
@@ -39,7 +39,7 @@ void merge_array_add(merge_array_t* merge, merge_item_t new_item)
 	*item = new_item;
 }
 
-void merge_array_add_discarded(merge_array_t* merge, uid_t removed_id)
+void merge_array_add_discarded(merge_array_t* merge, unid_t removed_id)
 {
 	if (merge->discarded_count >= MAX_ITEMS)
 		return;

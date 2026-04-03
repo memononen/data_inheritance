@@ -9,7 +9,7 @@
 #include "imgui_utils.h"
 #include "utils.h"
 
-uid_t gradient_add(gradient_t* grad, float t, ImVec4 color)
+unid_t gradient_add(gradient_t* grad, float t, ImVec4 color)
 {
 	if (grad->stops_count >= MAX_COLOR_STOPS) return 0;
 	int32_t idx = grad->stops_count++;
@@ -40,7 +40,7 @@ void gradient_remove_at(gradient_t* grad, int32_t idx)
 		grad->stops[i] = grad->stops[i+1];
 }
 
-int32_t gradient_index_of(const gradient_t* grad, uid_t id)
+int32_t gradient_index_of(const gradient_t* grad, unid_t id)
 {
 	for (int32_t i = 0; i < grad->stops_count; i++)
 		if (grad->stops[i].id == id)
@@ -48,14 +48,14 @@ int32_t gradient_index_of(const gradient_t* grad, uid_t id)
 	return INVALID_INDEX;
 }
 
-void gradient_remove(gradient_t* grad, uid_t id)
+void gradient_remove(gradient_t* grad, unid_t id)
 {
 	int32_t idx = gradient_index_of(grad, id);
 	if (idx == INVALID_INDEX) return;
 	gradient_remove_at(grad, idx);
 }
 
-bool gradient_is_override(gradient_t* grad, uid_t id)
+bool gradient_is_override(gradient_t* grad, unid_t id)
 {
 	for (int32_t i = 0; i < grad->stops_count; i++)
 		if (grad->stops[i].id == id)
@@ -66,7 +66,7 @@ bool gradient_is_override(gradient_t* grad, uid_t id)
 	return false;
 }
 
-bool gradient_is_discarded(gradient_t* grad, uid_t id)
+bool gradient_is_discarded(gradient_t* grad, unid_t id)
 {
 	for (int32_t i = 0; i < grad->discarded_count; i++)
 		if (grad->discarded[i] == id)
@@ -75,7 +75,7 @@ bool gradient_is_discarded(gradient_t* grad, uid_t id)
 }
 
 
-void gradient_mark_discarded(gradient_t* grad, uid_t id)
+void gradient_mark_discarded(gradient_t* grad, unid_t id)
 {
 	if (id == INVALID_ID) return;
 	for (int32_t i = 0; i < grad->discarded_count; i++)
@@ -94,7 +94,7 @@ void gradient_remove_discard_at(gradient_t* grad, int32_t idx)
 		grad->discarded[i] = grad->discarded[i+1];
 }
 
-void gradient_clear_override(gradient_t* grad, uid_t id)
+void gradient_clear_override(gradient_t* grad, unid_t id)
 {
 	for (int32_t i = 0; i < grad->stops_count; i++) {
 		if (grad->stops[i].id == id) {
@@ -534,15 +534,13 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 			color_stop_t* stop = &grad->stops[i];
 			ImGui_PushIDInt(stop->id);
 
-			ImRect row_rect = ImGui_GetRowRect(ImGui_DefaultRowHeight);
-			ImGui_BeginPack(row_rect);
-
 			const bool item_is_override = stop->is_inserted;
 			const bool item_has_overrides = color_stop_has_overrides(stop);
 
-			// Override marker for the whole row
-			if (is_derived)
-				override_marker_overlay(row_rect, item_is_override, item_has_overrides);
+
+			// Allocate row of default frame height.
+			ImRect row_rect = ImGui_GetRowRect(ImGui_DefaultRowHeight);
+			ImGui_BeginPack(row_rect);
 
 			// Row icon so that we have space for full row indicator and first widget indicator
 			ImGui_PackNextSlot(ImGui_MeasureIcon(), ImGuiPack_Start, ImGuiAlign_Center);
@@ -552,61 +550,27 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 			if (is_derived) {
 				ImGui_PackNextSlotEx(ImGui_MeasureIconButton(), ImGuiPack_End, ImGuiAlign_Center, 0.f);
 				if (ImGui_IconButtonColoredEx(ICON_ARROW_BACK, IM_COL32(255, 255, 255, 128), item_has_overrides || item_is_override)) {
-					if (ImGui_GetIO()->KeyCtrl)
-						command = command_make_revert_at(i);
-					else
-						ImGui_OpenPopup("revert_menu", 0);
-				}
-				ImGui_SetItemTooltip("Revert changes.");
-
-				if (ImGui_BeginPopup("revert_menu", 0)) {
-
-					if (ImGui_MenuItemWithIconEx("Revert All", ICON_ARROW_BACK, NULL, false, item_has_overrides || item_is_override)) {
-						command = command_make_revert_at(i);
-					}
-					if (ImGui_MenuItemWithIconEx("Revert property Position", ICON_EDIT, NULL, false, stop->override_pos)) {
-						stop->override_pos = false;
-						changed = true;
-					}
-					if (ImGui_MenuItemWithIconEx("Revert property Color", ICON_EDIT, NULL, false, stop->override_color)) {
-						stop->override_color = false;
-						changed = true;
-					}
-					ImGui_EndPopup();
+					// ...
 				}
 			}
 
 			// Remove
 			ImGui_PackNextSlotEx(ImGui_MeasureIconButton(), ImGuiPack_End, ImGuiAlign_Center, 0.f);
 			if (ImGui_IconButtonColored(ICON_X, IM_COL32(255, 255, 255, 128))) {
-				command = command_make_remove_at(i);
+				// ...
 			}
-			ImGui_SetItemTooltip("Remove color stop.");
 
-
-			// Stop position
+			// Stop position (size = (frame_height * 3, frame_height))
 			ImGui_PackNextSlot(ImGui_MeasureFrame(3.f), ImGuiPack_Start, ImGuiAlign_Center);
 			if (ImGui_InputFloat("##pos", &stop->pos)) {
-				stop->pos = clampf(stop->pos, 0.f, 1.f);
-				if (is_derived && !stop->is_inserted)
-					stop->override_pos = true;
-				changed = true;
+				// ...
 			}
-			if (is_derived)
-				override_marker_overlay(ImGui_GetItemRect(), stop->override_pos, false);
 
-			// Color
+			// Color, 100%
 			ImGui_PackNextSlotPct(1.f, row_h, ImGuiPack_Start, ImGuiAlign_Center);
-			float col[4];
-			memcpy(col, &stop->color.x, sizeof(col));
-			if (ImGui_ColorEdit4("##color", col, ImGuiColorEditFlags_DisplayHex)) {
-				memcpy(&stop->color.x, col, sizeof(col));
-				if (is_derived && !stop->is_inserted)
-					stop->override_color = true;
-				changed = true;
+			if (ImGui_ColorEdit4("##color", &stop->color.x, ImGuiColorEditFlags_DisplayHex)) {
+				// ...
 			}
-			if (is_derived)
-				override_marker_overlay(ImGui_GetItemRect(), stop->override_color, false);
 
 			ImGui_EndPack();
 
@@ -638,7 +602,7 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 		gradient_insert_at(grad, INSERT_END, new_stop);
 		changed = true;
 	} else if (command.type == COMMAND_REMOVE_AT) {
-		uid_t discarded_id = grad->stops[command.idx].id;
+		unid_t discarded_id = grad->stops[command.idx].id;
 		gradient_remove_at(grad, command.idx);
 		if (is_derived)
 			gradient_mark_discarded(grad, discarded_id);
@@ -653,7 +617,7 @@ bool edit_gradient(gradient_t* grad, const gradient_t* base_grad)
 		gradient_clear_discareded(grad);
 		changed = true;
 	} else if (command.type == COMMAND_REVERT_AT) {
-		uid_t reverted_id = grad->stops[command.idx].id;
+		unid_t reverted_id = grad->stops[command.idx].id;
 		gradient_clear_override(grad, reverted_id);
 		changed = true;
 	}

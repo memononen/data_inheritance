@@ -2,7 +2,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef int32_t uid_t;
+typedef int32_t unid_t; // Unique ID
 
 static inline float clampf(float x, float mn, float mx)
 {
@@ -20,7 +20,7 @@ enum {
 };
 
 typedef struct merge_item {
-	uid_t id;
+	unid_t id;
 	int32_t base_idx;
 	int32_t derived_idx;
 	bool is_pinned;
@@ -29,16 +29,16 @@ typedef struct merge_item {
 typedef struct array_merge {
 	merge_item_t items[MAX_ITEMS];
 	int32_t items_count;
-	uid_t discarded[MAX_ITEMS];
+	unid_t discarded[MAX_ITEMS];
 	int32_t discarded_count;
 } merge_array_t;
 
 void merge_array_add(merge_array_t* merge, merge_item_t new_item);
-void merge_array_add_discarded(merge_array_t* merge, uid_t removed_id);
+void merge_array_add_discarded(merge_array_t* merge, unid_t removed_id);
 void merge_array_reconcile(merge_array_t* base, merge_array_t* derived);
 
-uid_t gen_id(void);
-const char* id_to_str(uid_t id);
+unid_t gen_id(void);
+const char* id_to_str(unid_t id);
 
 const char* gen_name(const char* name_base);
 

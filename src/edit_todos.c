@@ -10,7 +10,7 @@
 #include "utils.h"
 
 
-uid_t todos_add(todo_list_t* todos, const char* name)
+unid_t todos_add(todo_list_t* todos, const char* name)
 {
 	if (todos->tasks_count >= MAX_TASKS) return 0;
 	int32_t idx = todos->tasks_count++;
@@ -39,7 +39,7 @@ void todos_remove_at(todo_list_t* todos, int32_t idx)
 		todos->tasks[i] = todos->tasks[i + 1];
 }
 
-int32_t todos_index_of(const todo_list_t* todos, uid_t id)
+int32_t todos_index_of(const todo_list_t* todos, unid_t id)
 {
 	for (int32_t i = 0; i < todos->tasks_count; i++)
 		if (todos->tasks[i].id == id)
@@ -47,7 +47,7 @@ int32_t todos_index_of(const todo_list_t* todos, uid_t id)
 	return -1;
 }
 
-void todos_remove(todo_list_t* todos, uid_t id)
+void todos_remove(todo_list_t* todos, unid_t id)
 {
 	int32_t idx = todos_index_of(todos, id);
 	if (idx == -1)
@@ -55,7 +55,7 @@ void todos_remove(todo_list_t* todos, uid_t id)
 	todos_remove_at(todos, idx);
 }
 
-void todos_mark_discarded(todo_list_t* todos, uid_t id)
+void todos_mark_discarded(todo_list_t* todos, unid_t id)
 {
 	if (id == 0) return;
 	for (int32_t i = 0; i < todos->discarded_count; i++) {
@@ -68,7 +68,7 @@ void todos_mark_discarded(todo_list_t* todos, uid_t id)
 
 void todos_clear_overrides(task_t* action);
 
-void todos_clear_override(todo_list_t* todos, uid_t id)
+void todos_clear_override(todo_list_t* todos, unid_t id)
 {
 	for (int32_t i = 0; i < todos->tasks_count; i++) {
 		if (todos->tasks[i].id == id) {
@@ -488,7 +488,7 @@ bool edit_todos(todo_list_t* todos, const todo_list_t* base_todos)
 		todos_insert_at(todos, command.idx, new_action);
 		changed = true;
 	} else if (command.type == COMMAND_REMOVE_AT) {
-		uid_t discarded_id = todos->tasks[command.idx].id;
+		unid_t discarded_id = todos->tasks[command.idx].id;
 		todos_remove_at(todos, command.idx);
 		if (is_derived)
 			todos_mark_discarded(todos, discarded_id);
@@ -510,7 +510,7 @@ bool edit_todos(todo_list_t* todos, const todo_list_t* base_todos)
 		todos_clear_discarded(todos);
 		changed = true;
 	} else if (command.type == COMMAND_REVERT_AT) {
-		uid_t reverted_id = todos->tasks[command.idx].id;
+		unid_t reverted_id = todos->tasks[command.idx].id;
 		todos_clear_override(todos, reverted_id);
 		changed = true;
 	}

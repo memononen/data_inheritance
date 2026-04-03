@@ -8,7 +8,7 @@
 #include "imgui_utils.h"
 #include "utils.h"
 
-uid_t actions_add(action_map_t* actions, button_code_t button, action_type_t action)
+unid_t actions_add(action_map_t* actions, button_code_t button, action_type_t action)
 {
 	if (actions->actions_count >= MAX_ACTIONS) return 0;
 	int32_t idx = actions->actions_count++;
@@ -40,7 +40,7 @@ void actions_remove_at(action_map_t* actions, int32_t idx)
 		actions->actions[i] = actions->actions[i + 1];
 }
 
-int32_t actions_index_of(const action_map_t* actions, uid_t id)
+int32_t actions_index_of(const action_map_t* actions, unid_t id)
 {
 	for (int32_t i = 0; i < actions->actions_count; i++)
 		if (actions->actions[i].id == id)
@@ -48,7 +48,7 @@ int32_t actions_index_of(const action_map_t* actions, uid_t id)
 	return -1;
 }
 
-void actions_remove(action_map_t* actions, uid_t id)
+void actions_remove(action_map_t* actions, unid_t id)
 {
 	int32_t idx = actions_index_of(actions, id);
 	if (idx == -1)
@@ -56,7 +56,7 @@ void actions_remove(action_map_t* actions, uid_t id)
 	actions_remove_at(actions, idx);
 }
 
-void actions_mark_discarded(action_map_t* actions, uid_t id)
+void actions_mark_discarded(action_map_t* actions, unid_t id)
 {
 	if (id == 0) return;
 	for (int32_t i = 0; i < actions->discarded_count; i++) {
@@ -69,7 +69,7 @@ void actions_mark_discarded(action_map_t* actions, uid_t id)
 
 void action_clear_overrides(action_t* action);
 
-void actions_clear_override(action_map_t* actions, uid_t id)
+void actions_clear_override(action_map_t* actions, unid_t id)
 {
 	for (int32_t i = 0; i < actions->actions_count; i++) {
 		if (actions->actions[i].id == id) {
@@ -505,7 +505,7 @@ bool edit_actions(action_map_t* actions, const action_map_t* base_actions)
 		actions_insert_at(actions, command.idx, new_action);
 		changed = true;
 	} else if (command.type == COMMAND_REMOVE_AT) {
-		uid_t discarded_id = actions->actions[command.idx].id;
+		unid_t discarded_id = actions->actions[command.idx].id;
 		actions_remove_at(actions, command.idx);
 		if (is_derived)
 			actions_mark_discarded(actions, discarded_id);
@@ -527,7 +527,7 @@ bool edit_actions(action_map_t* actions, const action_map_t* base_actions)
 		actions_clear_discarded(actions);
 		changed = true;
 	} else if (command.type == COMMAND_REVERT_AT) {
-		uid_t reverted_id = actions->actions[command.idx].id;
+		unid_t reverted_id = actions->actions[command.idx].id;
 		actions_clear_override(actions, reverted_id);
 		changed = true;
 	}

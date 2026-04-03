@@ -45,7 +45,7 @@ FetchContent_MakeAvailable(SDL3)
 # Dear ImGui
 FetchContent_Declare(imgui_external
 	GIT_REPOSITORY https://github.com/ocornut/imgui.git
-	GIT_TAG v1.92.6-docking
+	GIT_TAG v1.92.7-docking
 	GIT_SHALLOW TRUE
 	GIT_PROGRESS TRUE
 )
@@ -65,13 +65,18 @@ add_library(imgui
 )
 target_include_directories(imgui PUBLIC ${imgui_external_SOURCE_DIR} ${imgui_external_SOURCE_DIR}/backends)
 target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
+set_target_properties(imgui PROPERTIES
+	CXX_STANDARD  17
+)
 
 # Dear Bindings
-FetchContent_Declare(dcimgui_external
-	URL file://C:/Users/memon/Downloads/dear_bindings_docking_clang_withgeneratedefaultargfunctions.zip
-	EXCLUDE_FROM_ALL
-)
-FetchContent_MakeAvailable(dcimgui_external)
+#FetchContent_Declare(dcimgui_external
+#	URL https://github.com/dearimgui/dear_bindings/releases/download/DearBindings_v0.18_ImGui_v1.92.7-docking/DearBindings_v0.18_ImGui_v1.92.7-docking.zip
+#	EXCLUDE_FROM_ALL
+#)
+#FetchContent_MakeAvailable(dcimgui_external)
+
+set(dcimgui_external_SOURCE_DIR ${CMAKE_SOURCE_DIR}/extern/dcimgui)
 
 add_library(dcimgui
 	${dcimgui_external_SOURCE_DIR}/dcimgui.h
@@ -85,6 +90,9 @@ add_library(dcimgui
 )
 target_include_directories(dcimgui PUBLIC ${dcimgui_external_SOURCE_DIR} ${dcimgui_external_SOURCE_DIR}/backends)
 target_link_libraries(dcimgui PUBLIC imgui SDL3::SDL3-static)
+set_target_properties(dcimgui PROPERTIES
+	CXX_STANDARD  17
+)
 
 if(MSVC)
 	add_compile_options(/utf-8 /MP /W4)

@@ -14,7 +14,7 @@ typedef struct color_stop {
 	float pos;
 	ImVec4 color;
 	// Meta
-	uid_t id;
+	unid_t id;
 	bool is_inserted;
 	bool override_color;
 	bool override_pos;
@@ -24,12 +24,12 @@ typedef struct gradient {
 	color_stop_t stops[MAX_COLOR_STOPS];
 	int32_t stops_count;
 	// Meta
-	uid_t discarded[MAX_COLOR_STOPS];
+	unid_t discarded[MAX_COLOR_STOPS];
 	int32_t discarded_count;
 	bool has_changes;
 } gradient_t;
 
-uid_t gradient_add(gradient_t* grad, float t, ImVec4 color);
+unid_t gradient_add(gradient_t* grad, float t, ImVec4 color);
 
 void gradient_update_inherited_data(const gradient_t* base_grad, gradient_t* derived_grad);
 
